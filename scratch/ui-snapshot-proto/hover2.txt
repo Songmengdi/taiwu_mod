@@ -1,1 +1,0 @@
-hover -> Camera_UIRoot/Canvas/LayerPart/ViewResourceBar/AnimationRoot/LeftPanel/BaseResource

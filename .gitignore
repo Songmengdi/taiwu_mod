@@ -4,7 +4,6 @@
 # 会话 / 本地环境
 .kimi-code/
 .venv-cover/
-.temp_demo/
 .artifacts/
 
 # 构建产物
@@ -25,7 +24,6 @@ mod/Plugins/*.deps.json
 sample/mod/Plugins/
 dev/hot*/
 taiwu-probe-dual/Plugins/
-test-mod/plugins/
 
 # 运行期产物
 runtime-*.png

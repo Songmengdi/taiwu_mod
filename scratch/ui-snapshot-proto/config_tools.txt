@@ -1,8 +1,0 @@
-  taiwu_ui_snapshot 拍摄 UI 快照：场景摘要+顶层窗口语义树（@eN ref/角色/状态），主入口
-  taiwu_ui_click 点击 @eN 或 selector（遮挡检查+变化 diff）
-  taiwu_ui_fill 向 input 填文本并提交
-  taiwu_ui_toggle 把 toggle 显式设为 on/off（幂等）
-  taiwu_ui_hover 悬停并返回 tooltip 全文（TooltipInvoker.ShowTips）
-  taiwu_ui_scroll 滚动 scroll 区域
-  taiwu_ui_wait 等文字/元素出现消失或毫秒
-  taiwu_ui_describe 单点深挖：组件全限定类名+程序集+父链（反编译定位）

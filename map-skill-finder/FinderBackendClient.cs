@@ -72,6 +72,15 @@ internal sealed record MerchantSearchResponse(
     bool Success, string Message, int TotalCount, int Page, int PageSize,
     int ElapsedMs, IReadOnlyList<MerchantRowView> Rows);
 
+internal sealed record RenxiaSearchRequestView(short AreaId, int GradeMask);
+
+// Key is a client-side sequence number: a block can hold several copies of the
+// same template enemy, so no field combination is a unique table row key.
+internal sealed record RenxiaRowView(int Key, short TemplateId, string Name, short AreaId, short BlockId, sbyte Grade);
+
+internal sealed record RenxiaSearchResponse(
+    bool Success, string Message, int TotalCount, int ElapsedMs, IReadOnlyList<RenxiaRowView> Rows);
+
 internal static class FinderBackendClient
 {
     private const string CatalogMethod = "TaiwuFinder.GetCatalog.v1";
@@ -79,6 +88,7 @@ internal static class FinderBackendClient
     private const string BookHoldingsMethod = "TaiwuFinder.GetBookHoldings.v1";
     private const string PersonMethod = "TaiwuFinder.SearchPeople.v1";
     private const string MerchantMethod = "TaiwuFinder.SearchMerchants.v1";
+    private const string RenxiaMethod = "TaiwuFinder.SearchRenxia.v1";
 
     internal static void GetCatalog(Action<FinderCatalogView> callback) =>
         Call(CatalogMethod, new SerializableModData(), data =>
@@ -162,6 +172,14 @@ internal static class FinderBackendClient
         parameter.Set("Page", request.Page);
         parameter.Set("PageSize", request.PageSize);
         Call(MerchantMethod, parameter, data => callback(ParseMerchantResponse(data)));
+    }
+
+    internal static void SearchRenxia(RenxiaSearchRequestView request, Action<RenxiaSearchResponse> callback)
+    {
+        var parameter = new SerializableModData();
+        parameter.Set("AreaId", (int)request.AreaId);
+        parameter.Set("GradeMask", request.GradeMask);
+        Call(RenxiaMethod, parameter, data => callback(ParseRenxiaResponse(data)));
     }
 
     private static BookSearchResponse ParseBookResponse(SerializableModData data)
@@ -284,6 +302,20 @@ internal static class FinderBackendClient
             Get(data, "Success", false), Get(data, "Message", string.Empty),
             Get(data, "TotalCount", 0), Get(data, "Page", 0), Get(data, "PageSize", 100),
             Get(data, "ElapsedMs", 0), rows);
+    }
+
+    private static RenxiaSearchResponse ParseRenxiaResponse(SerializableModData data)
+    {
+        int count = Get(data, "Count", 0);
+        var rows = new List<RenxiaRowView>(count);
+        for (int i = 0; i < count; i++)
+            rows.Add(new RenxiaRowView(i,
+                checked((short)Get(data, $"TemplateId{i}", -1)), Get(data, $"Name{i}", string.Empty),
+                checked((short)Get(data, $"AreaId{i}", -1)), checked((short)Get(data, $"BlockId{i}", -1)),
+                checked((sbyte)Get(data, $"Grade{i}", 0))));
+        return new RenxiaSearchResponse(
+            Get(data, "Success", false), Get(data, "Message", string.Empty),
+            Get(data, "TotalCount", 0), Get(data, "ElapsedMs", 0), rows);
     }
 
     private static void Call(string method, SerializableModData parameter, Action<SerializableModData> callback) =>

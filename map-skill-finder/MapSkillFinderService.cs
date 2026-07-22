@@ -156,6 +156,15 @@ internal sealed record MerchantSearchResult(
     long ElapsedMilliseconds,
     IReadOnlyList<MerchantSearchRow> Rows);
 
+internal sealed record RenxiaSearchRequest(short AreaId, int GradeMask);
+
+internal sealed record RenxiaSearchRow(short TemplateId, string Name, short AreaId, short BlockId, sbyte Grade);
+
+internal sealed record RenxiaSearchResult(
+    int TotalCount,
+    long ElapsedMilliseconds,
+    IReadOnlyList<RenxiaSearchRow> Rows);
+
 internal static class MapSkillFinderService
 {
     private static readonly FieldInfo SoldLibraryBooksField =
@@ -509,6 +518,43 @@ internal static class MapSkillFinderService
 
     private static string MerchantGuildName(sbyte guildType) =>
         Config.MerchantType.Instance.GetItem(guildType)?.Name ?? $"商会{guildType}";
+
+    // Renxia are template enemies living on map blocks (Organization template 18),
+    // not real NPCs, so the scan walks block data instead of the character domain.
+    internal static RenxiaSearchResult SearchRenxia(RenxiaSearchRequest request)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        ValidateArea(request.AreaId);
+        var rows = new List<RenxiaSearchRow>();
+        Span<MapBlockData> blocks = DomainManager.Map.GetAreaBlocks(request.AreaId);
+        for (short blockId = 0; blockId < blocks.Length; blockId++)
+        {
+            List<MapTemplateEnemyInfo>? enemies = blocks[blockId].TemplateEnemyList;
+            if (enemies == null)
+                continue;
+            foreach (MapTemplateEnemyInfo enemy in enemies)
+            {
+                CharacterItem? config = Config.Character.Instance.GetItem(enemy.TemplateId);
+                if (config == null || config.OrganizationInfo.OrgTemplateId != 18)
+                    continue;
+                sbyte grade = config.OrganizationInfo.Grade;
+                if (request.GradeMask != 0 && (request.GradeMask & (1 << grade)) == 0)
+                    continue;
+                string name = config.Surname + config.GivenName;
+                rows.Add(new RenxiaSearchRow(enemy.TemplateId,
+                    string.IsNullOrWhiteSpace(name) ? $"任侠{enemy.TemplateId}" : name,
+                    request.AreaId, blockId, grade));
+            }
+        }
+
+        RenxiaSearchRow[] ordered = rows
+            .OrderByDescending(row => row.Grade)
+            .ThenBy(row => row.BlockId)
+            .ThenBy(row => row.TemplateId)
+            .ToArray();
+        stopwatch.Stop();
+        return new RenxiaSearchResult(ordered.Length, stopwatch.ElapsedMilliseconds, ordered);
+    }
 
     private static IEnumerable<BookCopyCandidate> GetPrivateLibraryBooks(
         DataContext context,

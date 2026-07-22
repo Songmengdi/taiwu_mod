@@ -13,6 +13,7 @@ internal static class FinderModMethods
     internal const string BookHoldingsMethod = "TaiwuFinder.GetBookHoldings.v1";
     internal const string PersonMethod = "TaiwuFinder.SearchPeople.v1";
     internal const string MerchantMethod = "TaiwuFinder.SearchMerchants.v1";
+    internal const string RenxiaMethod = "TaiwuFinder.SearchRenxia.v1";
 
     internal static void Register(string modId)
     {
@@ -21,6 +22,7 @@ internal static class FinderModMethods
         Register(modId, BookHoldingsMethod, CreateCallback(nameof(GetBookHoldings)));
         Register(modId, PersonMethod, CreateCallback(nameof(SearchPeople)));
         Register(modId, MerchantMethod, CreateCallback(nameof(SearchMerchants)));
+        Register(modId, RenxiaMethod, CreateCallback(nameof(SearchRenxia)));
     }
 
     // Delegate.CreateDelegate avoids compiler-generated method-group/lambda
@@ -48,7 +50,7 @@ internal static class FinderModMethods
             // Frontend features are introduced independently from the long-lived backend process.
             // A missing value in an older backend is read as 0 by the client, so it can ask for a restart
             // before attempting an unregistered method.
-            response.Set("ApiVersion", 2);
+            response.Set("ApiVersion", 3);
             response.Set("CurrentAreaId", (int)catalog.CurrentAreaId);
             response.Set("DateTick", catalog.DateTick);
             response.Set("AreaCount", catalog.Areas.Count);
@@ -252,6 +254,27 @@ internal static class FinderModMethods
                 response.Set($"GuildName{i}", row.GuildName);
                 response.Set($"Level{i}", (int)row.Level);
                 response.Set($"Robbed{i}", row.Robbed);
+            }
+        });
+
+    private static SerializableModData SearchRenxia(DataContext context, SerializableModData data) =>
+        Safe("查询任侠", response =>
+        {
+            var request = new RenxiaSearchRequest(
+                checked((short)Required(data, "AreaId")),
+                Get(data, "GradeMask", 0));
+            RenxiaSearchResult result = MapSkillFinderService.SearchRenxia(request);
+            response.Set("TotalCount", result.TotalCount);
+            response.Set("ElapsedMs", checked((int)result.ElapsedMilliseconds));
+            response.Set("Count", result.Rows.Count);
+            for (int i = 0; i < result.Rows.Count; i++)
+            {
+                RenxiaSearchRow row = result.Rows[i];
+                response.Set($"TemplateId{i}", (int)row.TemplateId);
+                response.Set($"Name{i}", row.Name);
+                response.Set($"AreaId{i}", (int)row.AreaId);
+                response.Set($"BlockId{i}", (int)row.BlockId);
+                response.Set($"Grade{i}", (int)row.Grade);
             }
         });
 

@@ -52,7 +52,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private readonly TaiwuValue<UiElement> _statusContent = new(Ui.Muted("正在读取地域目录……"));
     private readonly TaiwuValue<UiElement>[] _tabContent =
     {
-        new(Ui.Spacer()), new(Ui.Spacer()), new(Ui.Spacer()), new(Ui.Spacer()),
+        new(Ui.Spacer()), new(Ui.Spacer()), new(Ui.Spacer()), new(Ui.Spacer()), new(Ui.Spacer()),
     };
     private sbyte _activeTab;
     private BookCatalog? _bookCatalog;
@@ -121,6 +121,15 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         new(Ui.Muted("变更筛选条件后自动寻找。"));
     private float _merchantSearchAt = -1f;
 
+    private readonly TaiwuSelection<sbyte> _renxiaGrades = new(TaiwuSelectionMode.Multiple);
+    private RenxiaSearchResponse? _renxiaResponse;
+    private readonly TaiwuTableModel<RenxiaRowView, int> _renxiaTable = new(row => row.Key);
+    // Renxia results live in their own dynamic host so the grade filter row
+    // stays mounted while an asynchronous query completes.
+    private readonly TaiwuValue<UiElement> _renxiaResultsContent =
+        new(Ui.Muted("选择品级后自动查找。"));
+    private float _renxiaSearchAt = -1f;
+
     internal void Initialize(ViewBottom owner)
     {
         if (_initialized)
@@ -141,6 +150,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             RefreshActivePage();
             if (next == 2 && _personResponse == null) SchedulePersonSearch();
             if (next == 3 && _merchantResponse == null) ScheduleMerchantSearch();
+            if (next == 4 && _renxiaResponse == null) ScheduleRenxiaSearch();
         };
         _bookSources.SelectionChanged += _ =>
         {
@@ -167,6 +177,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _merchantGuilds.SelectionChanged += _ => ScheduleMerchantSearch();
         _merchantLevels.SelectionChanged += _ => ScheduleMerchantSearch();
         _caravanState.SelectionChanged += _ => ScheduleMerchantSearch();
+        _renxiaTable.Selection.SelectionChanged += _ => RefreshActivePage();
+        _renxiaGrades.SelectionChanged += _ => ScheduleRenxiaSearch();
     }
 
     internal void Open()
@@ -203,6 +215,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             RefreshActivePage();
             if (_activeTab == 2) SchedulePersonSearch();
             if (_activeTab == 3) ScheduleMerchantSearch();
+            if (_activeTab == 4) ScheduleRenxiaSearch();
         });
     }
 
@@ -229,6 +242,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             new UiTabPage<sbyte>(1, "技艺书", Ui.Dynamic(_tabContent[1], 1200f) with { Key = "life-dynamic" }),
             new UiTabPage<sbyte>(2, "人物", Ui.Dynamic(_tabContent[2], 1200f) with { Key = "person-dynamic" }),
             new UiTabPage<sbyte>(3, "商会", Ui.Dynamic(_tabContent[3], 1200f) with { Key = "merchant-dynamic" }),
+            new UiTabPage<sbyte>(4, "任侠", Ui.Dynamic(_tabContent[4], 1200f) with { Key = "renxia-dynamic" }),
         }, new TaiwuTabViewOptions { Height = 1300f, TabHeight = 64f, ContentPadding = 18f }) with { Key = "main-tabs" };
 
         return new UiWindow(OwnerId, WindowId,
@@ -1044,6 +1058,80 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) });
     }
 
+    private UiElement BuildRenxiaPage()
+    {
+        // The backend method only exists after a game restart registers it.
+        if (_catalog != null && !SupportsRenxiaSearch)
+            return Ui.Muted("任侠查找功能已更新：请重启游戏，使后端载入新版接口。") with { Key = "renxia-unsupported" };
+        _renxiaResultsContent.SetValueWithoutNotify(BuildRenxiaResults());
+        var rows = new List<UiElement>
+        {
+            Ui.Row(
+                Ui.FilterButtons("品级", _renxiaGrades,
+                    Enumerable.Range(0, 9).Select(value => new TaiwuChoiceOption<sbyte>((sbyte)value,
+                        GradeName((sbyte)value))).ToArray(), true),
+                Ui.Flex(Ui.Spacer(0)),
+                Ui.ResetIcon(ResetRenxia)) with { Key = "renxia-grades" },
+            Ui.Dynamic(_renxiaResultsContent, 800f) with { Key = "renxia-results-dynamic" },
+        };
+        return Ui.Column(rows.ToArray()) with { Key = "renxia-content" };
+    }
+
+    private UiElement BuildRenxiaResults()
+    {
+        if (_renxiaResponse == null)
+            return Ui.Muted("选择品级后自动查找。") with { Key = "renxia-empty" };
+        if (!_renxiaResponse.Success)
+            return Ui.Muted(_renxiaResponse.Message) with { Key = "renxia-error" };
+        _renxiaTable.SetItems(_renxiaResponse.Rows);
+        RenxiaRowView? selected = Selected(_renxiaTable);
+        var columns = new[]
+        {
+            new TaiwuTableColumn<RenxiaRowView>("name", "名字", row => row.Name, 260f, true, row => row.Name),
+            new TaiwuTableColumn<RenxiaRowView>("grade", "品级", row => GradeName(row.Grade),
+                150f, true, row => row.Grade),
+            new TaiwuTableColumn<RenxiaRowView>("location", "地格", row => $"地格 {row.BlockId}",
+                180f, true, row => row.BlockId),
+        };
+        return Ui.Column(
+            Ui.Row(
+                Ui.Heading($"任侠结果 · {_renxiaResponse.TotalCount} 个 · {_renxiaResponse.ElapsedMs} ms"),
+                Ui.Flex(Ui.Spacer(0))) with { Key = "renxia-results-header" },
+            Ui.Row(
+                Ui.Flex(Ui.Table(_renxiaTable, columns,
+                    new TaiwuTableOptions { Height = 700f, RowHeight = 70f }), 2f),
+                Ui.Flex(BuildRenxiaDetail(selected), 1f))) with { Key = "renxia-results" };
+    }
+
+    private UiElement BuildRenxiaDetail(RenxiaRowView? row)
+    {
+        if (row == null) return Ui.Muted("选择任侠查看详情。");
+        var rows = new List<UiElement>
+        {
+            Ui.Heading(row.Name),
+            Ui.Text($"任侠 · {GradeName(row.Grade)} · 地格 {row.BlockId}"),
+        };
+        if (CanMarkSelectedArea && row.BlockId >= 0)
+        {
+            rows.Add(Ui.Spacer(8f));
+            rows.Add(Ui.Row(
+                Ui.Button("标记地格", () => MarkRenxiaLocation(row),
+                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
+                Ui.Flex(Ui.Spacer(0))));
+        }
+        return Ui.Column(rows.ToArray());
+    }
+
+    private void MarkRenxiaLocation(RenxiaRowView row)
+    {
+        if (!CanMarkSelectedArea)
+        {
+            SetStatus("仅能标记太吾当前所在地域的地格。");
+            return;
+        }
+        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) });
+    }
+
     private UiElement ActionRow(Action search, Action reset, string label) => Ui.Row(
         Ui.Button(label, search, new TaiwuButtonOptions { Width = 300f }),
         Ui.ResetIcon(reset)) with { Key = "actions-" + label };
@@ -1158,6 +1246,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             _personSearchAt = -1f;
             _merchantSearchAt = -1f;
+            _renxiaSearchAt = -1f;
             return;
         }
         CheckWorldChanges();
@@ -1183,6 +1272,21 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             {
                 _merchantSearchAt = -1f;
                 SearchMerchants();
+            }
+        }
+        if (_renxiaSearchAt >= 0f)
+        {
+            if (_activeTab != 4) _renxiaSearchAt = -1f;
+            else if (Time.unscaledTime >= _renxiaSearchAt)
+            {
+                _renxiaSearchAt = -1f;
+                if (HasRenxiaFilter) SearchRenxia();
+                else
+                {
+                    // No grade selected: stay on the hint instead of listing the whole area.
+                    _renxiaResponse = null;
+                    _renxiaResultsContent.SetValue(BuildRenxiaResults());
+                }
             }
         }
     }
@@ -1216,11 +1320,19 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             RefreshActivePage();
             if (_activeTab == 2) SchedulePersonSearch();
             if (_activeTab == 3) ScheduleMerchantSearch();
+            if (_activeTab == 4) ScheduleRenxiaSearch();
         });
     }
 
     private void ScheduleMerchantSearch() =>
         _merchantSearchAt = Time.unscaledTime + PersonSearchDebounceSeconds;
+
+    private void ScheduleRenxiaSearch() =>
+        _renxiaSearchAt = Time.unscaledTime + PersonSearchDebounceSeconds;
+
+    // Renxia search requires at least one grade; without one the tab only shows
+    // a hint. Any selected grade auto-searches after a short debounce.
+    private bool HasRenxiaFilter => _renxiaGrades.Selected.Count > 0;
 
     // Person search requires at least one filter; without one the tab only
     // shows a hint. Any active filter auto-searches after a short debounce.
@@ -1281,6 +1393,28 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         });
     }
 
+    private void SearchRenxia()
+    {
+        if (_selectedAreaId < 0) return;
+        if (!SupportsRenxiaSearch)
+        {
+            SetStatus("任侠查找需要重启游戏后才能使用。新版后端尚未载入。");
+            RefreshActivePage();
+            return;
+        }
+        int gradeMask = _renxiaGrades.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
+        SetStatus("正在查询任侠……");
+        int version = ++_requestVersion;
+        FinderBackendClient.SearchRenxia(new RenxiaSearchRequestView(_selectedAreaId, gradeMask), response =>
+        {
+            if (!Accept(version)) return;
+            _renxiaResponse = response;
+            _renxiaTable.SetItems(response.Rows);
+            SetStatus(response.Success ? $"找到 {response.TotalCount} 个任侠 · {response.ElapsedMs} ms" : response.Message);
+            _renxiaResultsContent.SetValue(BuildRenxiaResults());
+        });
+    }
+
     private void ResetCombat()
     {
         _combatSect = _combatType = -1; _combatSkill = -1;
@@ -1306,6 +1440,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _personResponse = null; _personTable.SetItems(Array.Empty<PersonRowView>()); RefreshActivePage();
     }
 
+    private void ResetRenxia()
+    {
+        _renxiaGrades.Clear();
+        _renxiaResponse = null; _renxiaTable.SetItems(Array.Empty<RenxiaRowView>()); RefreshActivePage();
+    }
+
     private void SelectArea(short areaId, bool markStale = true, bool refresh = true)
     {
         if (_catalog == null) return;
@@ -1315,6 +1455,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         if (markStale) MarkAllStale();
         if (markStale && _activeTab == 2) SchedulePersonSearch();
         if (markStale && _activeTab == 3) ScheduleMerchantSearch();
+        if (markStale && _activeTab == 4) ScheduleRenxiaSearch();
         if (markStale && refresh)
         {
             RefreshActivePage();
@@ -1329,8 +1470,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         // cannot land after the area changed.
         _requestVersion++;
         _combatHoldings = null; _lifeHoldings = null; _personResponse = null; _merchantResponse = null;
+        _renxiaResponse = null;
         _personTable.SetItems(Array.Empty<PersonRowView>());
         _merchantTable.SetItems(Array.Empty<MerchantRowView>());
+        _renxiaTable.SetItems(Array.Empty<RenxiaRowView>());
         ClearStatus();
     }
 
@@ -1353,6 +1496,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         1 => BuildTabPage(BuildLifePage(), "life"),
         2 => BuildTabPage(BuildPersonPage(), "person"),
         3 => BuildTabPage(BuildMerchantPage(), "merchant"),
+        4 => BuildTabPage(BuildRenxiaPage(), "renxia"),
         _ => Ui.Spacer(),
     };
 
@@ -1381,6 +1525,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _catalog?.Areas.FirstOrDefault(item => item.AreaId == areaId)?.Name ?? $"地域{areaId}";
 
     private bool SupportsBookHoldingWorkspace => _catalog?.ApiVersion >= 2;
+
+    // ApiVersion 3 added the renxia search method; older backends only get it
+    // after a game restart, so the tab shows a restart hint instead.
+    private bool SupportsRenxiaSearch => _catalog?.ApiVersion >= 3;
 
     private bool CanMarkSelectedArea => _catalog?.CurrentAreaId == _selectedAreaId;
 

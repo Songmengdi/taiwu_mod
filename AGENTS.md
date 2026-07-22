@@ -75,7 +75,7 @@ dotnet build MapSkillFinder.Frontend.csproj -c Release
 
 ### Issue tracker
 
-Issue 与 PRD 跟踪在本仓库的 GitHub Issues（使用 `gh` CLI）。见 `docs/agents/issue-tracker.md`。
+Issue 与 PRD 以本地 markdown 文件形式存放在 `.scratch/<feature-slug>/` 下（spec + 每 ticket 一个文件）。见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 

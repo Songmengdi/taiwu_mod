@@ -333,6 +333,10 @@ internal sealed class TableRowView : MonoBehaviour
     private TextMeshProUGUI? _actionText;
     private int _rowIndex;
     private bool _disabled;
+    // Pointer-enter events only fire on a fresh enter, while Render() runs on
+    // every projection/scroll/viewport refresh. Track the logical hover state
+    // so a re-render under a stationary pointer cannot drop the highlight.
+    private bool _hovered;
 
     internal RectTransform Rect => (RectTransform)transform;
 
@@ -414,11 +418,13 @@ internal sealed class TableRowView : MonoBehaviour
         TaiwuMenuHover hover = gameObject.AddComponent<TaiwuMenuHover>();
         hover.Enter = () =>
         {
+            _hovered = true;
             if (!_disabled && _hover != null)
                 _hover.gameObject.SetActive(true);
         };
         hover.Exit = () =>
         {
+            _hovered = false;
             if (_hover != null)
                 _hover.gameObject.SetActive(false);
         };
@@ -445,7 +451,7 @@ internal sealed class TableRowView : MonoBehaviour
         if (_selected != null)
             _selected.gameObject.SetActive(selected);
         if (_hover != null)
-            _hover.gameObject.SetActive(false);
+            _hover.gameObject.SetActive(_hovered && !disabled);
         if (_button != null)
         {
             _button.interactable = !disabled;

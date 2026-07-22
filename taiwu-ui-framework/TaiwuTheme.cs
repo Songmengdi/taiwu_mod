@@ -179,18 +179,22 @@ internal sealed class TaiwuTheme
     internal void ApplySecondaryTab(CImage image, CButton button, bool selected)
     {
         Sprite? normal = selected ? Find("ui9_btn_second_toggle_2") : null;
-        Sprite? hover = Find("ui9_btn_second_toggle_1");
         image.sprite = normal;
         image.type = Image.Type.Sliced;
         image.color = normal == null ? Color.clear : Color.white;
-        button.transition = Selectable.Transition.SpriteSwap;
-        button.spriteState = new SpriteState
-        {
-            highlightedSprite = hover,
-            selectedSprite = normal ?? hover,
-            pressedSprite = normal ?? hover,
-            disabledSprite = normal,
-        };
+        // SpriteSwap cannot restore the normal sprite on pointer exit: after a
+        // hover the swapped sprite stuck around (selected tabs lost their red,
+        // unselected tabs kept the hover look) until the next Refresh. Hover is
+        // a separate overlay driven by TaiwuMenuHover, same as the bottom tabs.
+        button.transition = Selectable.Transition.None;
+    }
+
+    internal void ApplySecondaryTabHover(CImage image)
+    {
+        image.sprite = Find("ui9_btn_second_toggle_1");
+        image.type = Image.Type.Sliced;
+        image.color = image.sprite == null ? new Color(1f, 1f, 1f, 0.12f) : Color.white;
+        image.raycastTarget = false;
     }
 
     internal void ApplySecondaryTabDivider(CImage image)

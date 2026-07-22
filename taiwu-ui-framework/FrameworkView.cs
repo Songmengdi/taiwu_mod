@@ -595,6 +595,14 @@ internal sealed class FrameworkView : UIBase
             CButton button = tab.gameObject.AddComponent<CButton>();
             button.targetGraphic = image;
             button.onClick.AddListener(() => node.Projection.Dispatch(new SelectChoiceIntent(captured)));
+            RectTransform hoverRect = CreateRect(
+                "Hover", tab, Vector2.zero, Vector2.one, Vector2.zero);
+            CImage hoverImage = hoverRect.gameObject.AddComponent<CImage>();
+            Theme.ApplySecondaryTabHover(hoverImage);
+            hoverRect.gameObject.SetActive(false);
+            TaiwuMenuHover hover = tab.gameObject.AddComponent<TaiwuMenuHover>();
+            hover.Enter = () => hoverRect.gameObject.SetActive(true);
+            hover.Exit = () => hoverRect.gameObject.SetActive(false);
             TextMeshProUGUI label = CreateText(
                 "Label", tab, initial.Items[index].Label, 24f,
                 TextAlignmentOptions.Center, TaiwuTextStyle.Body);

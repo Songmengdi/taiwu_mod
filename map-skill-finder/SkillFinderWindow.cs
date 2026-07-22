@@ -137,7 +137,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _initialized = true;
         _personTable.Selection.SelectionChanged += _ => RefreshActivePage();
         _merchantTable.InlineRowAction = row => CanMarkSelectedArea && row.BlockId >= 0
-            ? new TaiwuMenuAction("定位", () => MarkMerchantLocation(row))
+            ? new TaiwuMenuAction(
+                MapMarkTracker.MarkedKey == MerchantMarkKey(row) ? "已标记" : "定位",
+                () => MarkMerchantLocation(row))
             : null;
         _mainTab.SelectionChanged += selected =>
         {
@@ -603,15 +605,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             Ui.Muted($"{holders.Count} 人持有此书。点击实际存在的书页状态；默认优先选择持有人最多的完整状态。"),
         };
-        // Life pickers carry only 2-3 options each: pair them to keep the pane compact.
-        for (int page = 0; page < BookHoldingWorkspace.LifePageCount; page += 2)
-        {
-            UiElement first = BuildLifeHoldingPagePicker(holders, page);
-            left.Add(page + 1 < BookHoldingWorkspace.LifePageCount
-                ? Ui.Row(Ui.Flex(first), Ui.Flex(BuildLifeHoldingPagePicker(holders, page + 1)))
-                    with { Key = $"life-holding-page-row-{page}" }
-                : first);
-        }
+        for (int page = 0; page < BookHoldingWorkspace.LifePageCount; page++)
+            left.Add(BuildLifeHoldingPagePicker(holders, page));
 
         return BuildHoldingWorkspace(
             Ui.Column(left.ToArray()) with { Key = "life-page-picker-list" },
@@ -754,16 +749,17 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         if (!CanMarkSelectedArea)
             return summary with { Key = key + "-holder-set-" + set.Key };
 
+        string markKey = "book:" + set.Key;
         return Ui.Row(
             Ui.Flex(summary),
-            Ui.Button("标记地格", () => MarkHolderSet(set),
+            Ui.Button(MarkButtonLabel(markKey), () => MarkHolderSet(set, markKey),
                 new TaiwuButtonOptions { Width = 156f, Style = TaiwuButtonStyle.Secondary })) with
         {
             Key = key + "-holder-set-" + set.Key,
         };
     }
 
-    private void MarkHolderSet(BookHolderSet set)
+    private void MarkHolderSet(BookHolderSet set, string markKey)
     {
         if (!CanMarkSelectedArea)
         {
@@ -781,10 +777,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             SetStatus("这套组合没有可标记的地格。");
             return;
         }
-        TryMarkLocations(locations);
+        TryMarkLocations(locations, markKey);
     }
 
-    private void TryMarkLocations(List<Location> locations)
+    private static string MarkButtonLabel(string markKey) =>
+        MapMarkTracker.MarkedKey == markKey ? "已标记" : "标记地格";
+
+    private void TryMarkLocations(List<Location> locations, string markKey)
     {
         try
         {
@@ -794,7 +793,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 SetStatus("太吾已不在当前查询地域，未标记地格。");
                 return;
             }
-            MapMarkTracker.ReplaceMarks(map, locations);
+            MapMarkTracker.ReplaceMarks(map, locations, markKey);
             Close();
         }
         catch (Exception exception)
@@ -966,23 +965,24 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         }
         if (CanMarkSelectedArea && person.BlockId >= 0)
         {
+            string markKey = "person:" + person.CharacterId;
             rows.Add(Ui.Spacer(8f));
             rows.Add(Ui.Row(
-                Ui.Button("标记地格", () => MarkPersonLocation(person),
+                Ui.Button(MarkButtonLabel(markKey), () => MarkPersonLocation(person, markKey),
                     new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
                 Ui.Flex(Ui.Spacer(0))));
         }
         return Ui.Column(rows.ToArray());
     }
 
-    private void MarkPersonLocation(PersonRowView person)
+    private void MarkPersonLocation(PersonRowView person, string markKey)
     {
         if (!CanMarkSelectedArea)
         {
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
-        TryMarkLocations(new List<Location> { new(person.AreaId, person.BlockId) });
+        TryMarkLocations(new List<Location> { new(person.AreaId, person.BlockId) }, markKey);
     }
 
     private UiElement BuildMerchantPage()
@@ -1048,6 +1048,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             with { Key = "merchant-results" };
     }
 
+    private static string MerchantMarkKey(MerchantRowView row) =>
+        $"merchant:{row.TargetType}:{row.EntityId}";
+
     private void MarkMerchantLocation(MerchantRowView row)
     {
         if (!CanMarkSelectedArea)
@@ -1055,7 +1058,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
-        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) });
+        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) }, MerchantMarkKey(row));
     }
 
     private UiElement BuildRenxiaPage()
@@ -1113,23 +1116,24 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         };
         if (CanMarkSelectedArea && row.BlockId >= 0)
         {
+            string markKey = $"renxia:{row.TemplateId}@{row.AreaId}:{row.BlockId}";
             rows.Add(Ui.Spacer(8f));
             rows.Add(Ui.Row(
-                Ui.Button("标记地格", () => MarkRenxiaLocation(row),
+                Ui.Button(MarkButtonLabel(markKey), () => MarkRenxiaLocation(row, markKey),
                     new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
                 Ui.Flex(Ui.Spacer(0))));
         }
         return Ui.Column(rows.ToArray());
     }
 
-    private void MarkRenxiaLocation(RenxiaRowView row)
+    private void MarkRenxiaLocation(RenxiaRowView row, string markKey)
     {
         if (!CanMarkSelectedArea)
         {
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
-        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) });
+        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) }, markKey);
     }
 
     private UiElement ActionRow(Action search, Action reset, string label) => Ui.Row(

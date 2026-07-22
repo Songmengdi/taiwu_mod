@@ -101,7 +101,7 @@ public static class RuntimePreview
         MapBlockData block = map.CurrentBlockData;
         int baseCount = map.FindMapBlockMarkLocationList.Count;
 
-        MapMarkTracker.ReplaceMarks(map, new List<Location> { here });
+        MapMarkTracker.ReplaceMarks(map, new List<Location> { here }, "self-test");
         string result;
         if (map.FindMapBlockMarkLocationList.Count != baseCount + 1)
         {
@@ -116,7 +116,7 @@ public static class RuntimePreview
             }
             else
             {
-                MapMarkTracker.ReplaceMarks(map, new List<Location> { here });
+                MapMarkTracker.ReplaceMarks(map, new List<Location> { here }, "self-test");
                 GEvent.OnEvent(UiEvents.WorldMapPlayerBlockChange, EasyPool.Get<ArgumentBox>());
                 result = map.FindMapBlockMarkLocationList.Count == baseCount
                     ? "OK: explore and arrival both remove the mod's mark"

@@ -15,14 +15,22 @@ internal static class MapMarkTracker
 
     internal static bool HasMarks => MarkedLocations.Count > 0;
 
-    internal static void ReplaceMarks(WorldMapModel map, List<Location> locations)
+    /// <summary>Identifies the finder entry (holder set / person / merchant …)
+    /// whose mark is currently on the map, so the UI can show it as 已标记 after
+    /// the window is reopened. Null when nothing is marked.</summary>
+    internal static string? MarkedKey { get; private set; }
+
+    internal static void ReplaceMarks(WorldMapModel map, List<Location> locations, string? key)
     {
         foreach (Location location in MarkedLocations)
             RemoveFromMap(map, location);
         MarkedLocations.Clear();
+        MarkedKey = null;
         map.AddLocationsToTemporaryMarkList(locations);
         foreach (Location location in locations)
             MarkedLocations.Add(location);
+        if (MarkedLocations.Count > 0)
+            MarkedKey = key;
     }
 
     /// <summary>Removes the mark once its block becomes explored (visible).</summary>
@@ -43,7 +51,11 @@ internal static class MapMarkTracker
     private static void Remove(WorldMapModel map, Location location)
     {
         if (MarkedLocations.Remove(location))
+        {
             RemoveFromMap(map, location);
+            if (MarkedLocations.Count == 0)
+                MarkedKey = null;
+        }
     }
 
     private static void RemoveFromMap(WorldMapModel map, Location location)

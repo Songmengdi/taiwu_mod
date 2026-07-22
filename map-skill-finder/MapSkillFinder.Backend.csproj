@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>MapSkillFinder.Backend</AssemblyName>
+    <RootNamespace>MapSkillFinder.Backend</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>mod\Plugins</OutputPath>
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <BackendDir>$(GameDir)\Backend</BackendDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="BackendPlugin.cs" />
+    <Compile Include="FinderModMethods.cs" />
+    <Compile Include="BookCombinationSolver.cs" />
+    <Compile Include="MapSkillFinderService.cs" />
+    <Reference Include="TaiwuModdingLib" HintPath="$(BackendDir)\TaiwuModdingLib.dll" Private="false" />
+    <Reference Include="GameData" HintPath="$(BackendDir)\GameData.dll" Private="false" />
+    <Reference Include="GameData.Shared" HintPath="$(BackendDir)\GameData.Shared.dll" Private="false" />
+    <Reference Include="GameData.Common" HintPath="$(BackendDir)\GameData.Common.dll" Private="false" />
+    <Reference Include="GameData.Utilities" HintPath="$(BackendDir)\GameData.Utilities.dll" Private="false" />
+    <Reference Include="GameData.ArchiveData" HintPath="$(BackendDir)\GameData.ArchiveData.dll" Private="false" />
+    <Reference Include="Redzen" HintPath="$(BackendDir)\Redzen.dll" Private="false" />
+  </ItemGroup>
+</Project>

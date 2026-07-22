@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TaiwuModDeployEnabled>false</TaiwuModDeployEnabled>
+    <GameDir>D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <ManagedDir>$(GameDir)\The Scroll of Taiwu_Data\Managed</ManagedDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <ProjectReference Include="..\TaiwuProbeFrontend\TaiwuProbeFrontend.csproj" ReferenceOutputAssembly="false" />
+    <None Include="..\Plugins\TaiwuProbeFrontend.dll" Link="TaiwuProbeFrontend.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(ManagedDir)\Newtonsoft.Json.dll" Private="true" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="true" />
+    <Reference Include="UnityEngine.UI" HintPath="$(ManagedDir)\UnityEngine.UI.dll" Private="true" />
+    <Reference Include="UnityEngine.UIModule" HintPath="$(ManagedDir)\UnityEngine.UIModule.dll" Private="true" />
+    <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)\Unity.TextMeshPro.dll" Private="true" />
+  </ItemGroup>
+</Project>

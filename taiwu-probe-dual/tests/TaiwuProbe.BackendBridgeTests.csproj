@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GameDir>D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <BackendDir>$(GameDir)\Backend</BackendDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="BackendBridgeProgram.cs" />
+    <Compile Include="..\TaiwuProbeBackend\BackendHttpBridge.cs" Link="BackendHttpBridge.cs" />
+    <Compile Include="..\TaiwuProbeBackend\PortConflictResolver.cs" Link="PortConflictResolver.cs" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(BackendDir)\Newtonsoft.Json.dll" Private="true" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+# .NET build outputs
+**/bin/
+**/obj/
+mod/Plugins/
+sample/mod/Plugins/
+
+# Runtime hot-load assemblies
+dev/hot*/
+
+# IDE and user-local files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Generated runtime captures and logs
+*.png
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Local verification captures and packaged output
+.artifacts/
+publish/

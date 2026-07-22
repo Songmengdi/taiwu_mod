@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>VillageWorkOptimizer.Backend</AssemblyName>
+    <RootNamespace>VillageWorkOptimizer.Backend</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>mod\Plugins</OutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <BackendDir>$(GameDir)\Backend</BackendDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="BackendPlugin.cs" />
+    <Compile Include="OptimizerModMethods.cs" />
+    <Compile Include="VillageWorkPlanner.cs" />
+    <Reference Include="0Harmony" HintPath="$(BackendDir)\0Harmony.dll" Private="false" />
+    <Reference Include="TaiwuModdingLib" HintPath="$(BackendDir)\TaiwuModdingLib.dll" Private="false" />
+    <Reference Include="GameData" HintPath="$(BackendDir)\GameData.dll" Private="false" />
+    <Reference Include="GameData.Shared" HintPath="$(BackendDir)\GameData.Shared.dll" Private="false" />
+    <Reference Include="GameData.Common" HintPath="$(BackendDir)\GameData.Common.dll" Private="false" />
+    <Reference Include="GameData.Utilities" HintPath="$(BackendDir)\GameData.Utilities.dll" Private="false" />
+  </ItemGroup>
+</Project>

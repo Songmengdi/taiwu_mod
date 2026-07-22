@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'VillageWorkOptimizer.Backend'">
+    <BaseIntermediateOutputPath>obj\backend\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj\backend\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'VillageWorkOptimizer.Frontend'">
+    <BaseIntermediateOutputPath>obj\frontend\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj\frontend\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,1 @@
+clicked Camera_UIRoot/Canvas/LayerPopUp/ViewFindMapBlock/FilterHolder/PrimaryFilter/ToggleGroup/SwitchToggleBig_1

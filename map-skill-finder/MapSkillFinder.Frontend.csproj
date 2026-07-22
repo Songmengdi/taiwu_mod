@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>MapSkillFinder.Frontend</AssemblyName>
+    <RootNamespace>MapSkillFinder.Frontend</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>mod\Plugins</OutputPath>
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CoreDll Condition="'$(CoreDll)' == ''">..\taiwu-ui-framework\mod\Plugins\TaiwuUi.Core.dll</CoreDll>
+  </PropertyGroup>
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <ManagedDir>$(GameDir)\The Scroll of Taiwu_Data\Managed</ManagedDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="FrontendPlugin.cs" />
+    <Compile Include="IsExternalInit.cs" />
+    <Compile Include="FinderBackendClient.cs" />
+    <Compile Include="BookHoldingWorkspace.cs" />
+    <Compile Include="FindMapBlockPatch.cs" />
+    <Compile Include="MapMarkTracker.cs" />
+    <Compile Include="SkillFinderWindow.cs" />
+    <Compile Include="RuntimePreview.cs" />
+    <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
+    <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="GameData.Shared" HintPath="$(ManagedDir)\GameData.Shared.dll" Private="false" />
+    <Reference Include="GameData.Serializer" HintPath="$(ManagedDir)\GameData.Serializer.dll" Private="false" />
+    <Reference Include="GameData.Common" HintPath="$(ManagedDir)\GameData.Common.dll" Private="false" />
+    <Reference Include="GameData.Utilities" HintPath="$(ManagedDir)\GameData.Utilities.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UIModule" HintPath="$(ManagedDir)\UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="$(ManagedDir)\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(ManagedDir)\UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="TaiwuUi.Core" HintPath="$(CoreDll)" Private="false" />
+  </ItemGroup>
+</Project>

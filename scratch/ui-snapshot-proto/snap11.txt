@@ -1,0 +1,93 @@
+场景: ViewWorldMap
+顶层: [LayerPopUp] 查找地格
+其他: [LayerPart] ViewResourceBar, 拾取物品, ViewWorldState
+其他: [LayerMain] ViewMapBlockCharList, 解封剑冢，迎战相枢化身
+地图装饰: 56 个子 Canvas / 3752 节点（不展开）
+
+--- 变化: +3 -3 ---
++ text|已找到37个地格…|
++ input|18|
++ rangeslider||MinValue=0,MaxValue=200,LowerValue=18,UpperValue=200
+- text|已找到2个地格…|
+- input|0|
+- rangeslider||MinValue=0,MaxValue=200,LowerValue=0,UpperValue=200
+
+ViewFindMapBlock  「查找地格」
+  text "查找地格"  <Text>
+  @e1 button  <ButtonCloseView>
+  @e2 toggle [on]  <Toggle>
+  text "已找到37个地格…"  <Res>
+  text "预设"  <Text>
+  @e3 toggle "0" [on]  <SwitchToggleBig>
+  @e4 toggle "1" [off]  <SwitchToggleBig_1>
+  @e5 toggle "2" [off]  <SwitchToggleBig_2>
+  @e6 toggle "3" [off]  <SwitchToggleBig_3>
+  @e7 toggle "4" [off]  <SwitchToggleBig_4>
+  @e8 toggle "5" [off]  <SwitchToggleBig_5>
+  @e9 toggle "6" [off]  <SwitchToggleBig_6>
+  @e10 toggle "7" [off]  <SwitchToggleBig_7>
+  @e11 toggle "8" [off]  <SwitchToggleBig_8>
+  @e12 toggle "9" [off]  <SwitchToggleBig_9>
+  @e13 button  <ResetBtn>
+  @e14 toggle "人物" [on]  <SwitchToggleBig>
+  @e15 toggle "商会" [off]  <SwitchToggleBig_1>
+  @e16 toggle "地格" [off]  <SwitchToggleBig_2>
+  @e17 toggle "野兽" [off]  <SwitchToggleBig_3>
+  @e18 toggle "坟墓" [off]  <SwitchToggleBig_4>
+  @e19 button  <ResetBtn>
+  @e20 toggle "身份" [on]  <SwitchToggleBig>
+  @e21 toggle "状态" [off]  <SwitchToggleBig_1>
+  @e22 toggle "属性" [off]  <SwitchToggleBig_2>
+  text "关系"  <Text>
+    @e23 button  <Button>
+  @e24 toggle "仇敌" [off]  <SwitchToggleBig>
+  @e25 toggle "爱慕" [off]  <SwitchToggleBig(Clone)>
+  @e26 toggle "夫妻" [off]  <SwitchToggleBig(Clone)>
+  @e27 toggle "结义" [off]  <SwitchToggleBig(Clone)>
+  @e28 toggle "朋友" [off]  <SwitchToggleBig(Clone)>
+  @e29 toggle "子女" [off]  <SwitchToggleBig(Clone)>
+  @e30 toggle "父母" [off]  <SwitchToggleBig(Clone)>
+  @e31 toggle "手足" [off]  <SwitchToggleBig(Clone)>
+  @e32 toggle "师承" [off]  <SwitchToggleBig(Clone)>
+  @e33 toggle "派系" [off]  <SwitchToggleBig(Clone)>
+  text "身份"  <Text>
+    @e34 button  <Button>
+  @e35 toggle "门派" [off]  <SwitchToggleBig>
+  @e36 toggle "居民" [off]  <SwitchToggleBig(Clone)>
+  @e37 toggle "村民" [off]  <SwitchToggleBig(Clone)>
+  text "品阶"  <Text>
+    @e38 button  <Button>
+  @e39 toggle "下" [off]  <SwitchToggleBig>
+  @e40 toggle "中" [off]  <SwitchToggleBig(Clone)>
+  @e41 toggle "上" [off]  <SwitchToggleBig(Clone)>
+  @e42 toggle "奇" [off]  <SwitchToggleBig(Clone)>
+  @e43 toggle "秘" [off]  <SwitchToggleBig(Clone)>
+  @e44 toggle "极" [off]  <SwitchToggleBig(Clone)>
+  @e45 toggle "超" [off]  <SwitchToggleBig(Clone)>
+  @e46 toggle "绝" [off]  <SwitchToggleBig(Clone)>
+  @e47 toggle "神" [off]  <SwitchToggleBig(Clone)>
+  text "关注"  <Text>
+    @e48 button  <Button>
+  @e49 toggle "是" [off]  <SwitchToggleBig>
+  @e50 toggle "否" [off]  <SwitchToggleBig(Clone)>
+  text "年龄"  <Text>
+    @e51 button  <Button>
+  @e52 input "18"  <InputField>
+  text "-"  <Text>
+  @e53 input "200"  <InputField_1>
+  @e54 rangeslider [MinValue=0,MaxValue=200,LowerValue=18,UpperValue=200]  <SliderWithStyle>
+  text "性别"  <Text>
+    @e55 button  <Button>
+  @e56 toggle "男" [off]  <SwitchToggleBig>
+  @e57 toggle "女" [off]  <SwitchToggleBig(Clone)>
+  text "夫妻"  <Text>
+    @e58 button  <Button>
+  @e59 toggle "有" [off]  <SwitchToggleBig>
+  @e60 toggle "无" [off]  <SwitchToggleBig(Clone)>
+  @e61 toggle "丧偶" [off]  <SwitchToggleBig(Clone)>
+  text "轮回"  <Text>
+    @e62 button  <Button>
+  @e63 toggle [off]  <Toggle>
+  @e64 input "9"  <InputField>
+  @e65 slider [9/9]  <SliderWithStyle>
+  @e66 clickable  <HandleRect>

@@ -1,0 +1,10 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+## 本 MOD 构建产物目录（OutputPath 指向 ..\Plugins\），不入库
+Plugins/
+
+## VS cache
+.vs/

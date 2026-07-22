@@ -1,0 +1,52 @@
+return {
+	Title = "运功预设绑定｜功法突破预设自动切换",
+	Author = "SMD",
+	Version = "0.2.1.0",
+	GameVersion = "1.0.56.0",
+	Description = "让每套运功预设分别记住其中每门功法使用的突破预设。\n\n【解决的问题】\n原版多套运功方案共用同一套功法突破预设。为一套运功调整玄机格或玄机之物后，其他运功方案也会跟着改变。\n\n【使用方法】\n1. 启用 Mod 并进入存档。\n2. 切换到一套运功预设，像平常一样为功法选择突破预设。\n3. 切换到另一套运功预设，设置另一组突破预设。\n4. 此后切换运功预设时，Mod 会自动恢复相应功法的突破路径、玄机格与玄机之物效果。\n\n【实现说明】\n首次修改某门功法时，Mod 会用修改前的预设初始化其他尚未绑定的运功方案，再只更新当前方案；已有绑定不会被覆盖。功法从方案中卸下时保留绑定，重新装入时立即恢复；明确清空一套运功方案时会同时清空其绑定。绑定数据随游戏存档保存。新增、复制或删除运功预设时也会同步维护对应关系。\n\n【兼容性】\n适配游戏 1.0.55.0。后端 Harmony Mod，不修改功法配置表，不直接修改突破盘或玄机物品。与其他直接修改运功方案切换、功法装备或功法突破预设切换逻辑的 Mod 可能冲突。\n\n遇到问题时，请在 Mod 设置中开启“详细日志”，复现后提供游戏目录 Logs 下最新的 GameData_*.log。",
+	Cover = "Cover.jpg",
+	WorkshopCover = "Cover.jpg",
+	Visibility = 0,
+	BackendPlugins = {
+		[1] = "CombatSkillPresetBinding.Backend.dll",
+	},
+	Source = 0,
+	HasArchive = true,
+	NeedRestartWhenSettingChanged = false,
+	ChangeConfig = false,
+	DefaultSettings = {
+		[1] = {
+			SettingType = "Toggle",
+			Key = "EnableBinding",
+			DisplayName = "启用运功预设绑定",
+			Description = "关闭后不再记录或应用绑定；已有绑定数据仍保留在存档中。",
+			GroupName = "功能",
+			DefaultValue = true,
+		},
+		[2] = {
+			SettingType = "Toggle",
+			Key = "DetailedLogging",
+			DisplayName = "详细日志",
+			Description = "在后端 GameData 日志中记录每次绑定和自动切换，排查问题时开启。",
+			GroupName = "调试",
+			DefaultValue = true,
+		},
+	},
+	SettingGroups = {
+		[1] = "功能",
+		[2] = "调试",
+	},
+	TagList = {
+		[1] = "Modifications",
+		[2] = "Compatible Mods",
+	},
+	FileId = 3762445301,
+	UpdateLogList = {
+		[1] = {
+			Timestamp = 1783769404,
+		},
+		[2] = {
+			Timestamp = 1783769449,
+		},
+	},
+}

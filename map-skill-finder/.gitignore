@@ -1,0 +1,12 @@
+bin/
+obj/
+mod/Plugins/*.dll
+mod/Plugins/*.pdb
+mod/Plugins/*.deps.json
+*.user
+*.suo
+.vs/
+.hot/
+runtime-*.png
+.artifacts/
+publish/

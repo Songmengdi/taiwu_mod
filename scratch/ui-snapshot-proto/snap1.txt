@@ -1,0 +1,8 @@
+场景: ViewWorldMap
+顶层: [LayerVeryTop] UI_Advance, SharedUIMask
+其他: [LayerPart] <color=#CFCAC2FF></color>, 拾取物品, 第2年10月  亥月·秋, ViewInstantNotificationEvent
+其他: [LayerMain] ViewMiniScene, 全部, UI_TaskPanelMain, 解封<color=#FFF693FF>剑冢</color>，迎战<color=#FFF693FF>相枢化身</color>
+地图装饰: 3 个场景 Canvas / 3 节点（不展开）: GlowRenderCanvas, Canvas, CanvasGlow
+
+UI_Advance  「UI_Advance」
+SharedUIMask  「SharedUIMask」

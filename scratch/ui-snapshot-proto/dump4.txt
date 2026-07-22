@@ -1,0 +1,96 @@
+FrameWork.UISystem.UIElements.CScrollRect : UnityEngine.MonoBehaviour
+prop RectTransform Viewport
+prop RectTransform Content
+prop ScrollDirection Direction
+prop Scrollbar ScrollBar
+prop Single ScrollSpeed
+prop Single DampedCoefficient
+prop MovementType Movement
+prop State CurState
+prop Boolean CanScroll
+prop Single AdjustSpeed
+prop Boolean IsPointerInside
+prop Boolean IsPointerOverAnyCScrollRect
+prop CancellationToken destroyCancellationToken
+prop Boolean useGUILayout
+prop Boolean enabled
+prop Boolean isActiveAndEnabled
+prop Transform transform
+prop GameObject gameObject
+prop String tag
+prop String name
+prop HideFlags hideFlags
+field Action OnScrollEnd
+method Void OnBeginDrag(PointerEventData eventData)
+method Void OnDrag(PointerEventData eventData)
+method Void OnEndDrag(PointerEventData eventData)
+method Void OnPointerEnter(PointerEventData eventData)
+method Void OnPointerExit(PointerEventData eventData)
+method Void OnPointerClick(PointerEventData eventData)
+method Void SetClick(Action onClick)
+method Boolean IsInViewport(RectTransform target, Single tolerance)
+method Void SetScrollEnable(Boolean canScroll)
+method Void ScrollTo(Vector2 targetAnchorPosition, Single duration)
+method Boolean ScrollTo(RectTransform refersRectTrans, Single duration)
+method Void UpdateScrollBarValue()
+method Boolean IsInvoking()
+method Void CancelInvoke()
+method Void Invoke(String methodName, Single time)
+method Void InvokeRepeating(String methodName, Single time, Single repeatRate)
+method Void CancelInvoke(String methodName)
+method Boolean IsInvoking(String methodName)
+method Coroutine StartCoroutine(String methodName)
+method Coroutine StartCoroutine(String methodName, Object value)
+method Coroutine StartCoroutine(IEnumerator routine)
+method Coroutine StartCoroutine_Auto(IEnumerator routine)
+method Void StopCoroutine(IEnumerator routine)
+method Void StopCoroutine(Coroutine routine)
+method Void StopCoroutine(String methodName)
+method Void StopAllCoroutines()
+method Component GetComponent(Type type)
+method T GetComponent()
+method Boolean TryGetComponent(Type type, Component& component)
+method Boolean TryGetComponent(T& component)
+method Component GetComponent(String type)
+method Component GetComponentInChildren(Type t, Boolean includeInactive)
+method Component GetComponentInChildren(Type t)
+method T GetComponentInChildren(Boolean includeInactive)
+method T GetComponentInChildren()
+method Component[] GetComponentsInChildren(Type t, Boolean includeInactive)
+method Component[] GetComponentsInChildren(Type t)
+method T[] GetComponentsInChildren(Boolean includeInactive)
+method Void GetComponentsInChildren(Boolean includeInactive, List`1 result)
+method T[] GetComponentsInChildren()
+method Void GetComponentsInChildren(List`1 results)
+method Component GetComponentInParent(Type t, Boolean includeInactive)
+method Component GetComponentInParent(Type t)
+method T GetComponentInParent(Boolean includeInactive)
+method T GetComponentInParent()
+method Component[] GetComponentsInParent(Type t, Boolean includeInactive)
+method Component[] GetComponentsInParent(Type t)
+method T[] GetComponentsInParent(Boolean includeInactive)
+method Void GetComponentsInParent(Boolean includeInactive, List`1 results)
+method T[] GetComponentsInParent()
+method Component[] GetComponents(Type type)
+method Void GetComponents(Type type, List`1 results)
+method Void GetComponents(List`1 results)
+method T[] GetComponents()
+method Int32 GetComponentIndex()
+method Boolean CompareTag(String tag)
+method Void SendMessageUpwards(String methodName, Object value, SendMessageOptions options)
+method Void SendMessageUpwards(String methodName, Object value)
+method Void SendMessageUpwards(String methodName)
+method Void SendMessageUpwards(String methodName, SendMessageOptions options)
+method Void SendMessage(String methodName, Object value)
+method Void SendMessage(String methodName)
+method Void SendMessage(String methodName, Object value, SendMessageOptions options)
+method Void SendMessage(String methodName, SendMessageOptions options)
+method Void BroadcastMessage(String methodName, Object parameter, SendMessageOptions options)
+method Void BroadcastMessage(String methodName, Object parameter)
+method Void BroadcastMessage(String methodName)
+method Void BroadcastMessage(String methodName, SendMessageOptions options)
+method Int32 GetInstanceID()
+method Int32 GetHashCode()
+method Boolean Equals(Object other)
+method String ToString()
+method Type GetType()

@@ -70,3 +70,17 @@ dotnet build MapSkillFinder.Frontend.csproj -c Release
 - `.git-backup/`（不入库）保存 map-skill-finder / taiwu-probe-dual / taiwu-ui-framework 合并前的独立 git 历史；需要时把对应目录移回 `<项目>/.git` 即可恢复。
 - taiwu-probe-dual 上游仓库：`https://github.com/magian1127/TaiwuProbe.git`
 - 提交信息使用中文，格式如 `feat: ...` / `fix: ...` / `chore: ...`。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 与 PRD 跟踪在本仓库的 GitHub Issues（使用 `gh` CLI）。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认 triage 标签：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+Single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（不存在时静默跳过，由 `/domain-modeling` 惰性创建）。见 `docs/agents/domain.md`。

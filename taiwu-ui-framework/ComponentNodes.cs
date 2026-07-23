@@ -412,11 +412,12 @@ internal sealed class RangeSliderNode(
 }
 
 internal sealed class ChoiceGroupNode(
-    string label, ElementStateProjection projection, bool compact) : UiNode
+    string label, ElementStateProjection projection, bool compact, bool selectOnly = false) : UiNode
 {
     internal string Label { get; } = label;
     internal ElementStateProjection Projection { get; } = projection;
     internal bool Compact { get; } = compact;
+    internal bool SelectOnly { get; } = selectOnly;
 }
 
 internal sealed class PopupSelectNode(

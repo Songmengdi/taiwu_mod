@@ -70,6 +70,16 @@ public static class TaiwuUiDemo
             Ui.ResetIcon(selected.Reset) with { Key = "reset" }) with { Key = "root" });
     }
 
+    public static void ShowSelectButtons()
+    {
+        var selected = new TaiwuSelection<string>(TaiwuSelectionMode.Single, new[] { "here" });
+        Open("select-buttons", "紧凑单选按钮", Ui.SelectButtons(selected, new[]
+        {
+            new TaiwuChoiceOption<string>("here", "嵩山 76"),
+            new TaiwuChoiceOption<string>("other", "然山 12"),
+        }, compact: true) with { Key = "select-buttons" }, 960f, 360f);
+    }
+
     public static void ShowTable()
     {
         var data = CreateTable();

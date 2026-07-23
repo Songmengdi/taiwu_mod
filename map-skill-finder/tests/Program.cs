@@ -17,6 +17,12 @@ static void Equal<T>(T expected, T actual, string message)
         throw new Exception($"{message}: expected={expected}, actual={actual}");
 }
 
+static void SequenceEqual<T>(IEnumerable<T> expected, IEnumerable<T> actual, string message)
+{
+    if (!expected.SequenceEqual(actual))
+        throw new Exception($"{message}: expected=[{string.Join(',', expected)}], actual=[{string.Join(',', actual)}]");
+}
+
 const ulong all = 0b11_1111;
 
 var one = BookCombinationSolver.Solve(new[]
@@ -68,6 +74,19 @@ Equal(1, multipleCopies.HolderCount, "multiple copies owned by one holder remain
 Equal(2, multipleCopies.Combinations[0].BookCount, "both required copies are selected");
 
 Console.WriteLine("MapSkillFinder domain contracts passed.");
+
+// ---- Combat area search: local first, fallback results ordered by count ----
+
+SequenceEqual(new short[] { 5, 1, 3 }, CombatAreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 5 }, 5),
+    "current area is searched before every other area");
+SequenceEqual(new short[] { 1, 3 }, CombatAreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 1 }, 5),
+    "missing current area does not invent an invalid query");
+var orderedAreas = CombatAreaSearchPlan.OrderByResultCount(
+    new[] { (AreaId: (short)3, Count: 2), (AreaId: (short)1, Count: 5), (AreaId: (short)2, Count: 5) },
+    item => item.Count, item => item.AreaId);
+SequenceEqual(new short[] { 1, 2, 3 }, orderedAreas.Select(item => item.AreaId),
+    "region sheets sort by result count then stable area id");
+Console.WriteLine("Combat area search contracts passed.");
 
 // ---- TaiwuPageMarking: per-page 已拥有/已读 coverage marks ----
 

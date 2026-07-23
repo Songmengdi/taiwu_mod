@@ -128,6 +128,24 @@ public sealed record UiFilterButtonsElement<T>(
         Compact);
 }
 
+/// <summary>
+/// A compact exclusive button group. Unlike <see cref="UiFilterButtonsElement{T}"/>,
+/// clicking the active option keeps it selected, making it suitable for content sheets.
+/// </summary>
+public sealed record UiSelectButtonsElement<T>(
+    TaiwuSelection<T> Selection,
+    IReadOnlyList<TaiwuChoiceOption<T>> Items,
+    bool Compact = false) : UiElement
+{
+    internal override UiNode Compile()
+    {
+        if (Selection.Mode != TaiwuSelectionMode.Single)
+            throw new ArgumentException("Select buttons require single selection.", nameof(Selection));
+        return new ChoiceGroupNode(string.Empty,
+            ElementStateProjection.Choices(Selection, Items), Compact, selectOnly: true);
+    }
+}
+
 /// <summary>A single-selection button that opens a native-styled floating choice panel.</summary>
 public sealed record UiPopupSelectElement<T>(
     string Label,
@@ -347,6 +365,9 @@ public static class Ui
     public static UiFilterButtonsElement<T> FilterButtons<T>(
         string label, TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
         bool compact = false) => new(label, selection, items, compact);
+    public static UiSelectButtonsElement<T> SelectButtons<T>(
+        TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
+        bool compact = false) => new(selection, items, compact);
     public static UiPopupSelectElement<T> PopupSelect<T>(
         string label, TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
         TaiwuPopupSelectOptions? options = null) =>

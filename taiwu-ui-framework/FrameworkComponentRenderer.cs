@@ -785,7 +785,9 @@ internal static class FilterFamilyModule
                 "Label", option, initial.Items[index].Label, 24f, theme,
                 TaiwuTextStyle.Body, TextAlignmentOptions.Center);
             UiFactory.Stretch(text.rectTransform, new Vector2(8f, 0f), new Vector2(-8f, 0f));
-            button.onClick.AddListener(() => node.Projection.Dispatch(new ToggleChoiceIntent(captured)));
+            button.onClick.AddListener(() => node.Projection.Dispatch(node.SelectOnly
+                ? new SelectChoiceIntent(captured)
+                : new ToggleChoiceIntent(captured)));
             buttons.Add((image, button));
         }
 

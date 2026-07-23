@@ -23,6 +23,20 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     }
 
     private sealed record CombatBookOption(short TemplateId, string Name, int Order);
+    private sealed class CombatAreaHoldings
+    {
+        internal CombatAreaHoldings(short areaId, BookHoldingsResponse holdings)
+        {
+            AreaId = areaId;
+            Holdings = holdings;
+        }
+
+        internal short AreaId { get; }
+        internal BookHoldingsResponse Holdings { get; }
+        internal sbyte[] States { get; } = new sbyte[BookHoldingWorkspace.CombatPageCount];
+        internal sbyte[] Types { get; } = Enumerable.Repeat((sbyte)-1, BookHoldingWorkspace.CombatPageCount).ToArray();
+    }
+
     private sealed class BookCatalog
     {
         internal IReadOnlyList<TaiwuChoiceOption<sbyte>> CombatSects { get; init; } =
@@ -70,14 +84,16 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private sbyte _combatSect = -1;
     private sbyte _combatType = -1;
     private short _combatSkill = -1;
-    private readonly sbyte[] _combatStates = { 0, 0, 0, 0, 0, 0 };
-    private readonly sbyte[] _combatTypes = { -1, -1, -1, -1, -1, -1 };
+    private IReadOnlyList<CombatAreaHoldings> _combatAreaHoldings = Array.Empty<CombatAreaHoldings>();
+    private readonly TaiwuSelection<short> _combatAreaTabs = new(TaiwuSelectionMode.Single);
+    private bool _combatSearchInFlight;
+    private int _combatSearchCompleted;
+    private int _combatSearchTotal;
 
     private sbyte _lifeType = -1;
     private short _lifeSkill = -1;
     private readonly sbyte[] _lifeStates = { 0, 0, 0, 0, 0 };
 
-    private BookHoldingsResponse? _combatHoldings;
     private BookHoldingsResponse? _lifeHoldings;
     private TaiwuBookKnowledge _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     private TaiwuBookKnowledge _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
@@ -150,6 +166,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             _activeTab = next;
             ClearStatus();
             RefreshActivePage();
+            if (next == 0 && _combatSkill >= 0 && !_combatSearchInFlight && _combatAreaHoldings.Count == 0)
+                StartCombatSearch();
             if (next == 2 && _personResponse == null) SchedulePersonSearch();
             if (next == 3 && _merchantResponse == null) ScheduleMerchantSearch();
             if (next == 4 && _renxiaResponse == null) ScheduleRenxiaSearch();
@@ -158,6 +176,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             MarkBookStale(0);
             MarkBookStale(1);
+            if (_activeTab == 0 && _combatSkill >= 0)
+                StartCombatSearch();
+            RefreshActivePage();
+        };
+        _combatAreaTabs.SelectionChanged += _ =>
+        {
+            _holderSetRenderLimit = HolderSetRenderPageSize;
             RefreshActivePage();
         };
         foreach (AbilityFilterState filter in _abilityFilters)
@@ -215,6 +240,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             SelectArea(catalog.CurrentAreaId, markStale: false, refresh: false);
             ClearStatus();
             RefreshActivePage();
+            if (_activeTab == 0 && _combatSkill >= 0) StartCombatSearch();
             if (_activeTab == 2) SchedulePersonSearch();
             if (_activeTab == 3) ScheduleMerchantSearch();
             if (_activeTab == 4) ScheduleRenxiaSearch();
@@ -254,9 +280,11 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             presentation: TaiwuWindowPresentation.Encyclopedia);
     }
 
-    private UiElement BuildTabPage(UiElement content, string key)
+    private UiElement BuildTabPage(UiElement content, string key, bool showRegionSelector = true)
     {
-        var children = new List<UiElement> { BuildRegionSelector() };
+        var children = new List<UiElement>();
+        if (showRegionSelector)
+            children.Add(BuildRegionSelector());
         if (!string.IsNullOrWhiteSpace(_status))
             children.Add(Ui.Dynamic(_statusContent, 36f) with { Key = key + "-status" });
         children.Add(Ui.Divider());
@@ -332,7 +360,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             Ui.Row(
                 BuildCombatSelectors(),
-                Ui.Flex(BuildBookSource())) with { Key = "combat-top-filters" },
+                Ui.Flex(BuildBookSource()),
+                Ui.ResetIcon(ResetCombat)) with { Key = "combat-top-filters" },
         };
         if (_combatSkill >= 0)
         {
@@ -340,12 +369,17 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             {
                 children.Add(Ui.Muted("书页组合功能已更新：请重启游戏，使后端载入新版接口。"));
             }
-            else if (_combatHoldings == null)
+            else if (_combatSearchInFlight)
             {
-                children.Add(Ui.Muted("先读取该地域实际持有的书页，再从可用状态中点选目标。"));
-                children.Add(ActionRow(LoadCombatHoldings, ResetCombat, "读取功法书持有情况"));
+                children.Add(Ui.Muted(_combatSearchCompleted == 0
+                    ? "正在搜索功法书……"
+                    : $"正在搜索全地图（{_combatSearchCompleted}/{_combatSearchTotal}）……"));
             }
-            else children.Add(BuildCombatHoldingWorkspace());
+            else if (_combatAreaHoldings.Count == 0)
+            {
+                children.Add(Ui.Muted("未找到此功法书的持有人。"));
+            }
+            else children.Add(BuildCombatAreaTabs());
         }
         return Ui.Column(children.ToArray()) with { Key = "combat-content" };
     }
@@ -505,8 +539,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 index =>
                 {
                     _combatSkill = skills[index].TemplateId;
-                    MarkBookStale(0);
-                    RefreshActivePage();
+                    StartCombatSearch();
                 },
                 Interactable: _combatType >= 0 && skills.Count > 0,
                 CloseCardAfterSelect: true),
@@ -559,18 +592,29 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         return Ui.Column(elements.ToArray()) with { Key = "life-selectors" };
     }
 
-    private UiElement BuildCombatHoldingWorkspace()
+    private UiElement BuildCombatAreaTabs()
     {
-        if (_combatHoldings == null)
+        CombatAreaHoldings? selected = SelectedCombatAreaHoldings;
+        if (selected == null)
             return Ui.Spacer();
-        if (!_combatHoldings.Success)
-            return Ui.Column(
-                Ui.Muted(_combatHoldings.Message),
-                ActionRow(LoadCombatHoldings, ResetCombat, "重新读取持有情况"));
 
-        IReadOnlyList<BookHolderView> holders = _combatHoldings.Holders;
-        IReadOnlyList<PageTargetChoice> targets = _combatTypes
-            .Select((type, page) => new PageTargetChoice(type, _combatStates[page]))
+        // Region sheets are compact exclusive choices, not another level of
+        // primary tabs: natural widths keep a one- or two-region result compact.
+        TaiwuChoiceOption<short>[] sheets = _combatAreaHoldings.Select(area =>
+            new TaiwuChoiceOption<short>(area.AreaId,
+                $"{AreaName(area.AreaId)} {area.Holdings.Holders.Count}")).ToArray();
+        return Ui.Column(
+            Ui.SelectButtons(_combatAreaTabs, sheets, compact: true)
+                with { Key = "combat-area-sheets" },
+            Ui.Spacer(10f),
+            BuildCombatHoldingWorkspace(selected)) with { Key = "combat-area-tabs" };
+    }
+
+    private UiElement BuildCombatHoldingWorkspace(CombatAreaHoldings area)
+    {
+        IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
+        IReadOnlyList<PageTargetChoice> targets = area.Types
+            .Select((type, page) => new PageTargetChoice(type, area.States[page]))
             .ToArray();
         IReadOnlyList<BookHolderSet> sets = BookHoldingWorkspace.FindHolderSets(holders, targets, combat: true);
 
@@ -581,11 +625,11 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         if (TaiwuPageMarking.HasAnyMark(_combatTaiwuKnowledge))
             left.Add(Ui.Muted("绿色背景 = 太吾已有或已读的书页，无需再寻。"));
         for (int page = 0; page < BookHoldingWorkspace.CombatPageCount; page++)
-            left.Add(BuildCombatHoldingPagePicker(holders, page));
+            left.Add(BuildCombatHoldingPagePicker(area, page));
 
         return BuildHoldingWorkspace(
-            Ui.Column(left.ToArray()) with { Key = "combat-page-picker-list" },
-            sets, LoadCombatHoldings, ResetCombat, "combat");
+            Ui.Column(left.ToArray()) with { Key = $"combat-{area.AreaId}-page-picker-list" },
+            sets, StartCombatSearch, ResetCombat, "combat-" + area.AreaId, area.AreaId);
     }
 
     private UiElement BuildLifeHoldingWorkspace()
@@ -614,7 +658,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
         return BuildHoldingWorkspace(
             Ui.Column(left.ToArray()) with { Key = "life-page-picker-list" },
-            sets, LoadLifeHoldings, ResetLife, "life");
+            sets, LoadLifeHoldings, ResetLife, "life", _selectedAreaId);
     }
 
     private UiElement BuildHoldingWorkspace(
@@ -622,7 +666,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         IReadOnlyList<BookHolderSet> sets,
         Action reload,
         Action reset,
-        string key)
+        string key,
+        short areaId)
     {
         var right = new List<UiElement>();
         // Render in pages: mounting all capped sets at once creates well over a
@@ -639,7 +684,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 right.Add(Ui.Divider());
                 previousCount = count;
             }
-            right.Add(BuildHolderSetRow(set, key));
+            right.Add(BuildHolderSetRow(set, key, areaId));
         }
         if (sets.Count > visible.Count)
         {
@@ -682,11 +727,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     // Wildcard page target ("不限"): the page is covered by any holder.
     private static readonly PageTargetChoice AnyPageTarget = new(-1, -1);
 
-    private UiElement BuildCombatHoldingPagePicker(IReadOnlyList<BookHolderView> holders, int page)
+    private UiElement BuildCombatHoldingPagePicker(CombatAreaHoldings area, int page)
     {
+        IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         IReadOnlyList<BookPageAvailability> availability =
             BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true);
-        PageTargetChoice selected = new(_combatTypes[page], _combatStates[page]);
+        PageTargetChoice selected = new(area.Types[page], area.States[page]);
         string title = page == 0 ? "总纲" : $"第{page}页";
         if (availability.Count == 0)
             return Ui.Column(Ui.Heading(title), Ui.Muted("无可用书页"));
@@ -701,10 +747,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_combatTaiwuKnowledge, page, item.Target))));
         return Ui.FilterButtons(title, Selection(selected, value =>
         {
-            _combatTypes[page] = value.Type;
-            _combatStates[page] = value.State;
+            area.Types[page] = value.Type;
+            area.States[page] = value.State;
             RefreshActivePage();
-        }), options.ToArray(), compact: true) with { Key = $"combat-holding-page-{page}" };
+        }), options.ToArray(), compact: true) with { Key = $"combat-{area.AreaId}-holding-page-{page}" };
     }
 
     private UiElement BuildLifeHoldingPagePicker(IReadOnlyList<BookHolderView> holders, int page)
@@ -743,7 +789,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         return $"{type}·{state}";
     }
 
-    private UiElement BuildHolderSetRow(BookHolderSet set, string key)
+    private UiElement BuildHolderSetRow(BookHolderSet set, string key, short areaId)
     {
         UiElement summary = Ui.Column(
             Ui.Text(string.Join("、", set.Holders.Select(holder => holder.Name))),
@@ -752,29 +798,29 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             Ui.Spacer(6f),
             Ui.Divider());
 
-        if (!CanMarkSelectedArea)
+        if (!CanMarkArea(areaId))
             return summary with { Key = key + "-holder-set-" + set.Key };
 
         string markKey = "book:" + set.Key;
         return Ui.Row(
             Ui.Flex(summary),
-            Ui.Button(MarkButtonLabel(markKey), () => MarkHolderSet(set, markKey),
+            Ui.Button(MarkButtonLabel(markKey), () => MarkHolderSet(set, markKey, areaId),
                 new TaiwuButtonOptions { Width = 156f, Style = TaiwuButtonStyle.Secondary })) with
         {
             Key = key + "-holder-set-" + set.Key,
         };
     }
 
-    private void MarkHolderSet(BookHolderSet set, string markKey)
+    private void MarkHolderSet(BookHolderSet set, string markKey, short areaId)
     {
-        if (!CanMarkSelectedArea)
+        if (!CanMarkArea(areaId))
         {
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
 
         List<Location> locations = set.Holders
-            .Where(holder => holder.AreaId == _selectedAreaId && holder.BlockId >= 0)
+            .Where(holder => holder.AreaId == areaId && holder.BlockId >= 0)
             .Select(holder => new Location(holder.AreaId, holder.BlockId))
             .Distinct()
             .ToList();
@@ -783,18 +829,19 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             SetStatus("这套组合没有可标记的地格。");
             return;
         }
-        TryMarkLocations(locations, markKey);
+        TryMarkLocations(locations, markKey, areaId);
     }
 
     private static string MarkButtonLabel(string markKey) =>
         MapMarkTracker.MarkedKey == markKey ? "已标记" : "标记地格";
 
-    private void TryMarkLocations(List<Location> locations, string markKey)
+    private void TryMarkLocations(List<Location> locations, string markKey, short? areaId = null)
     {
         try
         {
             WorldMapModel map = SingletonObject.getInstance<WorldMapModel>();
-            if (map.CurrentAreaId != _selectedAreaId)
+            short targetAreaId = areaId ?? _selectedAreaId;
+            if (map.CurrentAreaId != targetAreaId)
             {
                 SetStatus("太吾已不在当前查询地域，未标记地格。");
                 return;
@@ -1146,54 +1193,148 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         Ui.Button(label, search, new TaiwuButtonOptions { Width = 300f }),
         Ui.ResetIcon(reset)) with { Key = "actions-" + label };
 
-    private void LoadCombatHoldings()
+    private CombatAreaHoldings? SelectedCombatAreaHoldings
     {
-        if (_selectedAreaId < 0 || _combatSkill < 0) return;
+        get
+        {
+            if (_combatAreaHoldings.Count == 0)
+                return null;
+            short selectedAreaId = _combatAreaTabs.Selected.Count == 0
+                ? _combatAreaHoldings[0].AreaId
+                : _combatAreaTabs.Selected.First();
+            return _combatAreaHoldings.FirstOrDefault(area => area.AreaId == selectedAreaId)
+                ?? _combatAreaHoldings[0];
+        }
+    }
+
+    private void StartCombatSearch()
+    {
+        if (_combatSkill < 0 || _catalog == null) return;
         if (!SupportsBookHoldingWorkspace)
         {
             SetStatus("书页组合功能需要重启游戏后才能使用。新版后端尚未载入。");
             RefreshActivePage();
             return;
         }
+
         byte sourceMask = 0;
         foreach (byte source in _bookSources.Selected) sourceMask |= source;
         if (sourceMask == 0)
         {
             SetStatus("请至少选择一种秘籍来源。");
+            RefreshActivePage();
             return;
         }
 
-        SetStatus("正在读取该功法的持有人与书页状态……");
+        IReadOnlyList<short> areas = CombatAreaSearchPlan.BuildSearchOrder(
+            _catalog.Areas.Select(area => area.AreaId), _catalog.CurrentAreaId);
+        if (areas.Count == 0)
+        {
+            SetStatus("没有可查询的地域。");
+            RefreshActivePage();
+            return;
+        }
+
         int version = ++_combatHoldingsVersion;
+        _combatSearchInFlight = true;
+        _combatSearchCompleted = 0;
+        _combatSearchTotal = areas.Count;
+        _combatAreaHoldings = Array.Empty<CombatAreaHoldings>();
+        _combatAreaTabs.Clear();
+        _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+        SetStatus("正在读取当前地域的持有情况……");
+        RefreshActivePage();
+        SearchCombatArea(version, areas, 0, sourceMask, new List<CombatAreaHoldings>());
+    }
+
+    private void SearchCombatArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        byte sourceMask,
+        List<CombatAreaHoldings> results)
+    {
         FinderBackendClient.GetBookHoldings(new BookHoldingsRequestView(
-            _selectedAreaId, 0, _combatSkill, sourceMask), response =>
+            areas[index], 0, _combatSkill, sourceMask), response =>
         {
             if (version != _combatHoldingsVersion || _window?.IsShowing != true) return;
-            _combatHoldings = response;
-            _combatTaiwuKnowledge = response.Success
-                ? BookHoldingWorkspace.BuildTaiwuKnowledge(
-                    response.TaiwuBooks, response.TaiwuReadingState, combat: true)
-                : TaiwuBookKnowledge.Empty;
-            _holderSetRenderLimit = HolderSetRenderPageSize;
-            if (response.Success)
+            _combatSearchCompleted++;
+            if (!response.Success)
             {
-                ApplyCombatHoldingDefaults(response.Holders);
-                SetStatus($"已读取 {response.Holders.Count} 位持有人 · {response.ElapsedMs} ms");
+                if (index == 0)
+                {
+                    _combatSearchInFlight = false;
+                    SetStatus(response.Message);
+                    RefreshActivePage();
+                    return;
+                }
+                SearchNextCombatArea(version, areas, index, sourceMask, results);
+                return;
             }
-            else SetStatus(response.Message);
-            RefreshActivePage();
+
+            if (index == 0)
+            {
+                _combatTaiwuKnowledge = BookHoldingWorkspace.BuildTaiwuKnowledge(
+                    response.TaiwuBooks, response.TaiwuReadingState, combat: true);
+            }
+            if (response.Holders.Count > 0)
+                results.Add(CreateCombatAreaHoldings(areas[index], response));
+
+            // A local hit is immediately useful and avoids an unnecessary full-map scan.
+            if (index == 0 && results.Count > 0)
+            {
+                CompleteCombatSearch(results);
+                return;
+            }
+            SearchNextCombatArea(version, areas, index, sourceMask, results);
         });
     }
 
-    private void ApplyCombatHoldingDefaults(IReadOnlyList<BookHolderView> holders)
+    private void SearchNextCombatArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        byte sourceMask,
+        List<CombatAreaHoldings> results)
     {
+        int next = index + 1;
+        if (next >= areas.Count)
+        {
+            CompleteCombatSearch(results);
+            return;
+        }
+        SetStatus($"正在搜索全地图（{_combatSearchCompleted}/{_combatSearchTotal}）……");
+        SearchCombatArea(version, areas, next, sourceMask, results);
+    }
+
+    private void CompleteCombatSearch(IReadOnlyList<CombatAreaHoldings> results)
+    {
+        _combatSearchInFlight = false;
+        _combatAreaHoldings = CombatAreaSearchPlan.OrderByResultCount(
+            results, area => area.Holdings.Holders.Count, area => area.AreaId);
+        _combatAreaTabs.Replace(_combatAreaHoldings.Take(1).Select(area => area.AreaId), notify: false);
+        _holderSetRenderLimit = HolderSetRenderPageSize;
+        ClearStatus();
+        RefreshActivePage();
+    }
+
+    private CombatAreaHoldings CreateCombatAreaHoldings(short areaId, BookHoldingsResponse holdings)
+    {
+        var area = new CombatAreaHoldings(areaId, holdings);
+        ApplyCombatHoldingDefaults(area);
+        return area;
+    }
+
+    private void ApplyCombatHoldingDefaults(CombatAreaHoldings area)
+    {
+        IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         for (int page = 0; page < BookHoldingWorkspace.CombatPageCount; page++)
         {
             // 正/逆（总纲为任意总纲类型）都已读或已有完整页的书页无需寻访，默认"不限"。
             if (TaiwuPageMarking.IsPageFullyCoveredByTaiwu(_combatTaiwuKnowledge, page))
             {
-                _combatTypes[page] = AnyPageTarget.Type;
-                _combatStates[page] = AnyPageTarget.State;
+                area.Types[page] = AnyPageTarget.Type;
+                area.States[page] = AnyPageTarget.State;
                 continue;
             }
             BookPageAvailability? preferred = BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true)
@@ -1205,8 +1346,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             preferred ??= BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true).FirstOrDefault();
             if (preferred != null)
             {
-                _combatTypes[page] = preferred.Target.Type;
-                _combatStates[page] = preferred.Target.State;
+                area.Types[page] = preferred.Target.Type;
+                area.States[page] = preferred.Target.State;
             }
         }
     }
@@ -1349,6 +1490,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             if (!dateChanged) return;
             MarkAllStale();
             RefreshActivePage();
+            if (_activeTab == 0 && _combatSkill >= 0) StartCombatSearch();
             if (_activeTab == 2) SchedulePersonSearch();
             if (_activeTab == 3) ScheduleMerchantSearch();
             if (_activeTab == 4) ScheduleRenxiaSearch();
@@ -1449,8 +1591,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private void ResetCombat()
     {
         _combatSect = _combatType = -1; _combatSkill = -1;
-        for (int i = 0; i < 6; i++) { _combatStates[i] = 0; _combatTypes[i] = -1; }
-        _combatHoldings = null; _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty; RefreshActivePage();
+        ClearCombatResults();
+        RefreshActivePage();
     }
 
     private void ResetLife()
@@ -1500,7 +1642,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         // Invalidate in-flight searches so a response for the previous area
         // cannot land after the area changed.
         _requestVersion++;
-        _combatHoldings = null; _lifeHoldings = null; _personResponse = null; _merchantResponse = null;
+        ClearCombatResults();
+        _lifeHoldings = null; _personResponse = null; _merchantResponse = null;
         _renxiaResponse = null;
         _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty; _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
         _personTable.SetItems(Array.Empty<PersonRowView>());
@@ -1513,14 +1656,24 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         if (kind == 0)
         {
-            _combatHoldings = null;
-            _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+            ClearCombatResults();
         }
         else
         {
             _lifeHoldings = null;
             _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
         }
+    }
+
+    private void ClearCombatResults()
+    {
+        _combatHoldingsVersion++;
+        _combatSearchInFlight = false;
+        _combatSearchCompleted = 0;
+        _combatSearchTotal = 0;
+        _combatAreaHoldings = Array.Empty<CombatAreaHoldings>();
+        _combatAreaTabs.Clear();
+        _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     }
 
     private void Render()
@@ -1532,7 +1685,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private UiElement BuildActiveTabPage() => _activeTab switch
     {
-        0 => BuildTabPage(BuildCombatPage(), "combat"),
+        0 => BuildTabPage(BuildCombatPage(), "combat", showRegionSelector: false),
         1 => BuildTabPage(BuildLifePage(), "life"),
         2 => BuildTabPage(BuildPersonPage(), "person"),
         3 => BuildTabPage(BuildMerchantPage(), "merchant"),
@@ -1570,7 +1723,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     // after a game restart, so the tab shows a restart hint instead.
     private bool SupportsRenxiaSearch => _catalog?.ApiVersion >= 3;
 
-    private bool CanMarkSelectedArea => _catalog?.CurrentAreaId == _selectedAreaId;
+    private bool CanMarkArea(short areaId) => _catalog?.CurrentAreaId == areaId;
+
+    private bool CanMarkSelectedArea => CanMarkArea(_selectedAreaId);
 
     private static TaiwuSelection<T> Selection<T>(T selected, Action<T> changed)
     {

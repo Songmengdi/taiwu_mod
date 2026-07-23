@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="..\BookCombinationSolver.cs" Link="BookCombinationSolver.cs" />
+    <Compile Include="..\CombatAreaSearchPlan.cs" Link="CombatAreaSearchPlan.cs" />
     <Compile Include="..\TaiwuPageMarking.cs" Link="TaiwuPageMarking.cs" />
   </ItemGroup>
 </Project>

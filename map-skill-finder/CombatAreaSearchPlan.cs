@@ -18,4 +18,9 @@ internal static class CombatAreaSearchPlan
         Func<T, int> resultCount,
         Func<T, short> areaId) =>
         results.OrderByDescending(resultCount).ThenBy(areaId).ToArray();
+
+    internal static bool ShouldStartAfterCatalog(
+        bool hasSelectedBook,
+        bool cacheValid,
+        bool searchInFlight) => hasSelectedBook && !cacheValid && !searchInFlight;
 }

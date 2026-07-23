@@ -86,6 +86,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private short _combatSkill = -1;
     private IReadOnlyList<CombatAreaHoldings> _combatAreaHoldings = Array.Empty<CombatAreaHoldings>();
     private readonly TaiwuSelection<short> _combatAreaTabs = new(TaiwuSelectionMode.Single);
+    // A completed search (including an empty result) remains reusable until
+    // the book/source changes, the player changes area, or the game advances a month.
+    private bool _combatSearchCacheValid;
     private bool _combatSearchInFlight;
     private int _combatSearchCompleted;
     private int _combatSearchTotal;
@@ -166,7 +169,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             _activeTab = next;
             ClearStatus();
             RefreshActivePage();
-            if (next == 0 && _combatSkill >= 0 && !_combatSearchInFlight && _combatAreaHoldings.Count == 0)
+            if (next == 0 && CombatAreaSearchPlan.ShouldStartAfterCatalog(
+                _combatSkill >= 0, _combatSearchCacheValid, _combatSearchInFlight))
                 StartCombatSearch();
             if (next == 2 && _personResponse == null) SchedulePersonSearch();
             if (next == 3 && _merchantResponse == null) ScheduleMerchantSearch();
@@ -240,7 +244,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             SelectArea(catalog.CurrentAreaId, markStale: false, refresh: false);
             ClearStatus();
             RefreshActivePage();
-            if (_activeTab == 0 && _combatSkill >= 0) StartCombatSearch();
+            if (_activeTab == 0 && CombatAreaSearchPlan.ShouldStartAfterCatalog(
+                _combatSkill >= 0, _combatSearchCacheValid, _combatSearchInFlight))
+                StartCombatSearch();
             if (_activeTab == 2) SchedulePersonSearch();
             if (_activeTab == 3) ScheduleMerchantSearch();
             if (_activeTab == 4) ScheduleRenxiaSearch();
@@ -1236,6 +1242,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         }
 
         int version = ++_combatHoldingsVersion;
+        _combatSearchCacheValid = false;
         _combatSearchInFlight = true;
         _combatSearchCompleted = 0;
         _combatSearchTotal = areas.Count;
@@ -1310,6 +1317,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private void CompleteCombatSearch(IReadOnlyList<CombatAreaHoldings> results)
     {
         _combatSearchInFlight = false;
+        _combatSearchCacheValid = true;
         _combatAreaHoldings = CombatAreaSearchPlan.OrderByResultCount(
             results, area => area.Holdings.Holders.Count, area => area.AreaId);
         _combatAreaTabs.Replace(_combatAreaHoldings.Take(1).Select(area => area.AreaId), notify: false);
@@ -1625,7 +1633,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         AreaOptionView? area = _catalog.Areas.FirstOrDefault(item => item.AreaId == areaId);
         if (area == null) return;
         _selectedAreaId = area.AreaId; _areaCategory = area.Category;
-        if (markStale) MarkAllStale();
+        if (markStale) MarkAllStale(invalidateCombat: false);
         if (markStale && _activeTab == 2) SchedulePersonSearch();
         if (markStale && _activeTab == 3) ScheduleMerchantSearch();
         if (markStale && _activeTab == 4) ScheduleRenxiaSearch();
@@ -1637,15 +1645,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         if (refresh) RefreshActivePage();
     }
 
-    private void MarkAllStale()
+    private void MarkAllStale(bool invalidateCombat = true)
     {
-        // Invalidate in-flight searches so a response for the previous area
-        // cannot land after the area changed.
         _requestVersion++;
-        ClearCombatResults();
+        if (invalidateCombat) ClearCombatResults();
         _lifeHoldings = null; _personResponse = null; _merchantResponse = null;
         _renxiaResponse = null;
-        _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty; _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+        _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
         _personTable.SetItems(Array.Empty<PersonRowView>());
         _merchantTable.SetItems(Array.Empty<MerchantRowView>());
         _renxiaTable.SetItems(Array.Empty<RenxiaRowView>());
@@ -1668,6 +1674,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private void ClearCombatResults()
     {
         _combatHoldingsVersion++;
+        _combatSearchCacheValid = false;
         _combatSearchInFlight = false;
         _combatSearchCompleted = 0;
         _combatSearchTotal = 0;

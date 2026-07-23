@@ -84,3 +84,7 @@ Issue 与 PRD 以本地 markdown 文件形式存放在 `.scratch/<feature-slug>/
 ### Domain docs
 
 Single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（不存在时静默跳过，由 `/domain-modeling` 惰性创建）。见 `docs/agents/domain.md`。
+
+### Steam 创意工坊发布
+
+发布或更新 Steam 创意工坊中的 Taiwu UI Framework / 太吾寻访时，先阅读 `.agents/skills/taiwu-steam-publish/SKILL.md`。该技能包含版本同步、构建与上传包校验、游戏内上传、以及订阅用户自行更新的流程。

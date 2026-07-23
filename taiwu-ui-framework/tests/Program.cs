@@ -1,6 +1,8 @@
 using TaiwuUi;
 
 Expect(TaiwuUiApi.ApiMajor, 2, "v2 API major");
+Expect(Enum.IsDefined(typeof(TaiwuButtonStyle), TaiwuButtonStyle.Outlined), true,
+    "outlined button style is public");
 
 var search = new TaiwuValue<string>("seed");
 var checkbox = new TaiwuValue<bool>(true);
@@ -80,7 +82,9 @@ UiElement content = Ui.Column(
     Ui.Row(
         Ui.Checkbox(checkbox, "显示隐藏地格") with { Key = "hidden" },
         Ui.ResetIcon(checkbox.Reset) with { Key = "reset" },
-        Ui.RefreshIcon(() => { }) with { Key = "refresh" }) with { Key = "actions" },
+        Ui.RefreshIcon(() => { }) with { Key = "refresh" },
+        Ui.Button("Outlined", () => { }, new TaiwuButtonOptions { Style = TaiwuButtonStyle.Outlined })
+            with { Key = "outlined" }) with { Key = "actions" },
     Ui.FilterButtons("资质", filterSelection, new[]
     {
         new TaiwuChoiceOption<string>("plain", "普通"),

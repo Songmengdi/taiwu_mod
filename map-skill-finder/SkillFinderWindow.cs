@@ -675,6 +675,30 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private static float CompactTriggerWidth(string text, float minimum, float maximum) =>
         Math.Clamp(text.Length * 26f + 32f, minimum, maximum);
 
+    private static UiElement BuildResultToolbar(
+        string key,
+        TaiwuSelection<short> areaTabs,
+        IReadOnlyList<TaiwuChoiceOption<short>> sheets,
+        Action reload,
+        Action searchFullMap,
+        UiElement? loadMore = null)
+    {
+        var actions = new List<UiElement>
+        {
+            Ui.Flex(Ui.SheetTabs(areaTabs, sheets) with { Key = key + "-area-sheets" }),
+            Ui.RefreshIcon(reload, 48f) with { Key = key + "-reload" },
+            Ui.Button("搜索全图", searchFullMap,
+                new TaiwuButtonOptions { Width = 164f, Style = TaiwuButtonStyle.Outlined })
+                with { Key = key + "-search-full-map" },
+        };
+        if (loadMore != null)
+            actions.Add(loadMore);
+
+        return Ui.Column(
+            Ui.Row(actions.ToArray()) with { Key = key + "-toolbar" },
+            Ui.Divider() with { Key = key + "-toolbar-divider" }) with { Key = key + "-result-toolbar" };
+    }
+
     private UiElement BuildLifeSelectors()
     {
         BookCatalog catalog = EnsureBookCatalog();
@@ -718,14 +742,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         TaiwuChoiceOption<short>[] sheets = _combatAreaHoldings.Select(area =>
             new TaiwuChoiceOption<short>(area.AreaId,
                 $"{AreaName(area.AreaId)} {area.Holdings.Holders.Count}")).ToArray();
-        return Ui.Column(
-            Ui.SheetTabs(_combatAreaTabs, sheets)
-                with { Key = "combat-area-sheets" },
-            Ui.Spacer(10f),
-            BuildCombatHoldingWorkspace(selected)) with { Key = "combat-area-tabs" };
+        return BuildCombatHoldingWorkspace(selected, sheets) with { Key = "combat-area-tabs" };
     }
 
-    private UiElement BuildCombatHoldingWorkspace(CombatAreaHoldings area)
+    private UiElement BuildCombatHoldingWorkspace(
+        CombatAreaHoldings area,
+        IReadOnlyList<TaiwuChoiceOption<short>> sheets)
     {
         IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         IReadOnlyList<PageTargetChoice> targets = area.Types
@@ -742,10 +764,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         for (int page = 0; page < BookHoldingWorkspace.CombatPageCount; page++)
             left.Add(BuildCombatHoldingPagePicker(area, page));
 
+        string key = "combat-" + area.AreaId;
         return BuildHoldingWorkspace(
             Ui.Column(left.ToArray()) with { Key = $"combat-{area.AreaId}-page-picker-list" },
-            sets, () => StartCombatSearch(forceFullMap: false), () => StartCombatSearch(forceFullMap: true),
-            ResetCombat, "combat-" + area.AreaId, area.AreaId);
+            sets, key, area.AreaId,
+            BuildResultToolbar(key, _combatAreaTabs, sheets,
+                () => StartCombatSearch(forceFullMap: false),
+                () => StartCombatSearch(forceFullMap: true)));
     }
 
     private UiElement BuildLifeAreaTabs()
@@ -757,14 +782,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         TaiwuChoiceOption<short>[] sheets = _lifeAreaHoldings.Select(area =>
             new TaiwuChoiceOption<short>(area.AreaId,
                 $"{AreaName(area.AreaId)} {area.Holdings.Holders.Count}")).ToArray();
-        return Ui.Column(
-            Ui.SheetTabs(_lifeAreaTabs, sheets)
-                with { Key = "life-area-sheets" },
-            Ui.Spacer(10f),
-            BuildLifeHoldingWorkspace(selected)) with { Key = "life-area-tabs" };
+        return BuildLifeHoldingWorkspace(selected, sheets) with { Key = "life-area-tabs" };
     }
 
-    private UiElement BuildLifeHoldingWorkspace(LifeAreaHoldings area)
+    private UiElement BuildLifeHoldingWorkspace(
+        LifeAreaHoldings area,
+        IReadOnlyList<TaiwuChoiceOption<short>> sheets)
     {
         IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         IReadOnlyList<PageTargetChoice> targets = area.States
@@ -781,20 +804,21 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         if (TaiwuPageMarking.HasAnyMark(_lifeTaiwuKnowledge))
             left.Add(Ui.Muted("绿色背景 = 太吾已有或已读的书页，无需再寻。"));
 
+        string key = "life-" + area.AreaId;
         return BuildHoldingWorkspace(
             Ui.Column(left.ToArray()) with { Key = $"life-{area.AreaId}-page-picker-list" },
-            sets, () => StartLifeSearch(forceFullMap: false), () => StartLifeSearch(forceFullMap: true),
-            ResetLife, "life-" + area.AreaId, area.AreaId);
+            sets, key, area.AreaId,
+            BuildResultToolbar(key, _lifeAreaTabs, sheets,
+                () => StartLifeSearch(forceFullMap: false),
+                () => StartLifeSearch(forceFullMap: true)));
     }
 
     private UiElement BuildHoldingWorkspace(
         UiElement pagePane,
         IReadOnlyList<BookHolderSet> sets,
-        Action reload,
-        Action searchFullMap,
-        Action reset,
         string key,
-        short areaId)
+        short areaId,
+        UiElement resultToolbar)
     {
         var right = new List<UiElement>();
         // Render in pages: mounting all capped sets at once creates well over a
@@ -822,22 +846,15 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                     _holderSetRenderLimit += HolderSetRenderPageSize;
                     RefreshActivePage();
                 },
-                new TaiwuButtonOptions { Width = 360f, Style = TaiwuButtonStyle.Secondary }));
+                new TaiwuButtonOptions { Width = 360f, Style = TaiwuButtonStyle.Outlined }));
         }
         if (sets.Count == BookHoldingWorkspace.MaxRenderedSets)
             right.Add(Ui.Muted($"组合较多，当前仅计算前 {BookHoldingWorkspace.MaxRenderedSets} 套。"));
 
-        // Header stays outside the scroll so the reload/reset actions and the set
-        // count remain visible while scrolling through combinations.
+        // Header stays outside the scroll so the set count remains visible while
+        // scrolling through combinations. Query actions live in the shared toolbar.
         UiElement holderPane = Ui.Column(
-            Ui.Row(
-                Ui.Heading("需要寻访的人"),
-                Ui.Flex(Ui.Spacer(0)),
-                Ui.Button("重新读取", reload,
-                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
-                Ui.Button("搜索全图", searchFullMap,
-                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
-                Ui.ResetIcon(reset)) with { Key = key + "-holding-header" },
+            Ui.Heading("需要寻访的人") with { Key = key + "-holding-header" },
             Ui.Muted(sets.Count == 0
                 ? "当前目标没有可覆盖的持有人组合。"
                 : $"共 {sets.Count} 套组合，按人数由少到多排序。"),
@@ -850,7 +867,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             Key = key + "-holding-columns",
         };
 
-        return Ui.Column(columns) with { Key = key + "-holding-workspace" };
+        return Ui.Column(
+            resultToolbar,
+            Ui.Spacer(14f),
+            columns) with { Key = key + "-holding-workspace" };
     }
 
     // Wildcard page target ("不限"): the page is covered by any holder.
@@ -935,7 +955,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         return Ui.Row(
             Ui.Flex(summary),
             Ui.Button(MarkButtonLabel(markKey), () => MarkHolderSet(set, markKey, areaId),
-                new TaiwuButtonOptions { Width = 156f, Style = TaiwuButtonStyle.Secondary })) with
+                new TaiwuButtonOptions { Width = 156f, Style = TaiwuButtonStyle.Outlined })) with
         {
             Key = key + "-holder-set-" + set.Key,
         };
@@ -1095,14 +1115,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         TaiwuChoiceOption<short>[] sheets = _personAreaResults.Select(area =>
             new TaiwuChoiceOption<short>(area.AreaId,
                 $"{AreaName(area.AreaId)} {area.Response.TotalCount}")).ToArray();
-        return Ui.Column(
-            Ui.SheetTabs(_personAreaTabs, sheets)
-                with { Key = "person-area-sheets" },
-            Ui.Spacer(10f),
-            BuildPersonResults(selected.Response)) with { Key = "person-area-tabs" };
+        return BuildPersonResults(selected.Response, sheets) with { Key = "person-area-tabs" };
     }
 
-    private UiElement BuildPersonResults(PersonSearchResponse response)
+    private UiElement BuildPersonResults(
+        PersonSearchResponse response,
+        IReadOnlyList<TaiwuChoiceOption<short>> sheets)
     {
         if (!response.Success)
             return Ui.Muted(response.Message) with { Key = "person-error" };
@@ -1131,19 +1149,16 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             ? $"人物结果 · 已加载 {response.People.Count}/{response.TotalCount} 人"
             : $"人物结果 · {response.TotalCount} 人 · {response.ElapsedMs} ms";
         int remaining = response.TotalCount - response.People.Count;
+        UiElement? loadMore = remaining > 0
+            ? Ui.Button($"继续加载 {remaining} 人", LoadMorePeople,
+                new TaiwuButtonOptions { Width = 240f, Style = TaiwuButtonStyle.Outlined })
+                with { Key = "person-load-more" }
+            : null;
         return Ui.Column(
-            Ui.Row(
-                Ui.Heading(title),
-                Ui.Flex(Ui.Spacer(0)),
-                Ui.Button("重新读取", SearchPeople,
-                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
-                Ui.Button("搜索全图", () => SearchPeople(forceFullMap: true),
-                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
-                remaining > 0
-                    ? Ui.Button($"继续加载 {remaining} 人",
-                        LoadMorePeople,
-                        new TaiwuButtonOptions { Width = 260f, Style = TaiwuButtonStyle.Secondary })
-                    : Ui.Spacer(0)) with { Key = "person-results-header" },
+            BuildResultToolbar("person", _personAreaTabs, sheets,
+                SearchPeople, () => SearchPeople(forceFullMap: true), loadMore),
+            Ui.Spacer(12f),
+            Ui.Heading(title) with { Key = "person-results-header" },
             Ui.Row(
                 Ui.Flex(Ui.Table(_personTable, columns,
                     new TaiwuTableOptions { Height = 590f, RowHeight = 70f }), 2f),
@@ -1176,7 +1191,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             rows.Add(Ui.Spacer(8f));
             rows.Add(Ui.Row(
                 Ui.Button(MarkButtonLabel(markKey), () => MarkPersonLocation(person, markKey),
-                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
+                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Outlined }),
                 Ui.Flex(Ui.Spacer(0))));
         }
         return Ui.Column(rows.ToArray());
@@ -1234,14 +1249,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         TaiwuChoiceOption<short>[] sheets = _merchantAreaResults.Select(area =>
             new TaiwuChoiceOption<short>(area.AreaId,
                 $"{AreaName(area.AreaId)} {area.Response.TotalCount}")).ToArray();
-        return Ui.Column(
-            Ui.SheetTabs(_merchantAreaTabs, sheets)
-                with { Key = "merchant-area-sheets" },
-            Ui.Spacer(10f),
-            BuildMerchantResults(selected.Response)) with { Key = "merchant-area-tabs" };
+        return BuildMerchantResults(selected.Response, sheets) with { Key = "merchant-area-tabs" };
     }
 
-    private UiElement BuildMerchantResults(MerchantSearchResponse response)
+    private UiElement BuildMerchantResults(
+        MerchantSearchResponse response,
+        IReadOnlyList<TaiwuChoiceOption<short>> sheets)
     {
         if (!response.Success)
             return Ui.Muted(response.Message) with { Key = "merchant-error" };
@@ -1261,19 +1274,17 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 180f, true, row => row.BlockId),
         };
         int remaining = response.TotalCount - response.Rows.Count;
+        UiElement? loadMore = remaining > 0
+            ? Ui.Button($"继续加载 {remaining} 项", LoadMoreMerchants,
+                new TaiwuButtonOptions { Width = 240f, Style = TaiwuButtonStyle.Outlined })
+                with { Key = "merchant-load-more" }
+            : null;
         return Ui.Column(
-            Ui.Row(
-                Ui.Heading($"商会结果 · {response.TotalCount} 项 · {response.ElapsedMs} ms"),
-                Ui.Flex(Ui.Spacer(0)),
-                Ui.Button("重新读取", SearchMerchants,
-                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
-                Ui.Button("搜索全图", () => SearchMerchants(forceFullMap: true),
-                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
-                remaining > 0
-                    ? Ui.Button($"继续加载 {remaining} 项",
-                        LoadMoreMerchants,
-                        new TaiwuButtonOptions { Width = 260f, Style = TaiwuButtonStyle.Secondary })
-                    : Ui.Spacer(0)) with { Key = "merchant-results-header" },
+            BuildResultToolbar("merchant", _merchantAreaTabs, sheets,
+                SearchMerchants, () => SearchMerchants(forceFullMap: true), loadMore),
+            Ui.Spacer(12f),
+            Ui.Heading($"商会结果 · {response.TotalCount} 项 · {response.ElapsedMs} ms")
+                with { Key = "merchant-results-header" },
             Ui.Table(_merchantTable, columns,
                 new TaiwuTableOptions { Height = 700f, RowHeight = 70f }))
             with { Key = "merchant-results" };
@@ -1326,14 +1337,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         TaiwuChoiceOption<short>[] sheets = _renxiaAreaResults.Select(area =>
             new TaiwuChoiceOption<short>(area.AreaId,
                 $"{AreaName(area.AreaId)} {area.Response.TotalCount}")).ToArray();
-        return Ui.Column(
-            Ui.SheetTabs(_renxiaAreaTabs, sheets)
-                with { Key = "renxia-area-sheets" },
-            Ui.Spacer(10f),
-            BuildRenxiaResults(selectedArea.Response)) with { Key = "renxia-area-tabs" };
+        return BuildRenxiaResults(selectedArea.Response, sheets) with { Key = "renxia-area-tabs" };
     }
 
-    private UiElement BuildRenxiaResults(RenxiaSearchResponse response)
+    private UiElement BuildRenxiaResults(
+        RenxiaSearchResponse response,
+        IReadOnlyList<TaiwuChoiceOption<short>> sheets)
     {
         if (!response.Success)
             return Ui.Muted(response.Message) with { Key = "renxia-error" };
@@ -1348,13 +1357,11 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 180f, true, row => row.BlockId),
         };
         return Ui.Column(
-            Ui.Row(
-                Ui.Heading($"任侠结果 · {response.TotalCount} 个 · {response.ElapsedMs} ms"),
-                Ui.Flex(Ui.Spacer(0)),
-                Ui.Button("重新读取", SearchRenxia,
-                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
-                Ui.Button("搜索全图", () => SearchRenxia(forceFullMap: true),
-                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary })) with { Key = "renxia-results-header" },
+            BuildResultToolbar("renxia", _renxiaAreaTabs, sheets,
+                SearchRenxia, () => SearchRenxia(forceFullMap: true)),
+            Ui.Spacer(12f),
+            Ui.Heading($"任侠结果 · {response.TotalCount} 个 · {response.ElapsedMs} ms")
+                with { Key = "renxia-results-header" },
             Ui.Row(
                 Ui.Flex(Ui.Table(_renxiaTable, columns,
                     new TaiwuTableOptions { Height = 700f, RowHeight = 70f }), 2f),
@@ -1375,7 +1382,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             rows.Add(Ui.Spacer(8f));
             rows.Add(Ui.Row(
                 Ui.Button(MarkButtonLabel(markKey), () => MarkRenxiaLocation(row, markKey),
-                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
+                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Outlined }),
                 Ui.Flex(Ui.Spacer(0))));
         }
         return Ui.Column(rows.ToArray());

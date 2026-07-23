@@ -27,6 +27,8 @@ public enum TaiwuButtonStyle
 {
     Primary,
     Secondary,
+    /// <summary>A quiet, framed action for contextual tools and row-level actions.</summary>
+    Outlined,
 }
 
 /// <summary>Visual treatment for a trigger that opens a popup card.</summary>

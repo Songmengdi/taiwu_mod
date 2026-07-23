@@ -278,11 +278,19 @@ internal sealed class TaiwuTheme
     {
         // Primary: ui9_btn_1_* set (warm-toned, consistent normal/hover/pressed)
         // Secondary: ui9_btn_2_* set (neutral-toned)
+        // Outlined: ui9_btn_three_0_* set (quiet dark face with a fine native border)
         if (style == TaiwuButtonStyle.Primary)
         {
             Sprite? normal = Find("ui9_btn_1_0") ?? Find("ui_sp_btn_1_0");
             Sprite? hover = Find("ui9_btn_1_1") ?? Find("ui_sp_btn_1_1");
             Sprite? pressed = Find("ui9_btn_1_3") ?? Find("ui_sp_btn_1_2");
+            ApplyButtonSet(image, button, normal, hover, pressed);
+        }
+        else if (style == TaiwuButtonStyle.Outlined)
+        {
+            Sprite? normal = Find("ui9_btn_three_0_0");
+            Sprite? hover = Find("ui9_btn_three_0_1");
+            Sprite? pressed = Find("ui9_btn_three_0_2") ?? hover;
             ApplyButtonSet(image, button, normal, hover, pressed);
         }
         else

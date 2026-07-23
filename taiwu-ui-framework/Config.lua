@@ -1,7 +1,7 @@
 return {
     Title = "Taiwu UI Framework",
     Author = "SMD",
-    Version = "2.1.2.0",
+    Version = "2.1.3.0",
     FileId = 3767831883,
     GameVersion = "1.0.58.0",
     Description = "Declarative native-style element framework for The Scroll of Taiwu MODs.\n\n太吾绘卷 MOD 前置框架：以声明式节点描述窗口界面，由框架创建与游戏原生风格一致的控件、布局、表格与弹窗，并托管窗口生命周期。\n\n【面向玩家的说明】\n本 Mod 本身不提供任何游戏功能，是其他 Mod（如「太吾寻访」）的前置依赖。订阅并启用后无需任何操作。\n\n【For players】\nThis mod does nothing on its own. It is a shared dependency of other mods (e.g. Map Skill Finder). Just subscribe and enable it.",
@@ -17,5 +17,5 @@ return {
     DefaultSettings = { },
     SettingGroups = { },
     TagList = { [1] = "Modifications", [2] = "Compatible Mods" },
-    UpdateLogList = { [1] = { Timestamp = 1784564482 }, [2] = { Timestamp = 1784649598 } },
+    UpdateLogList = { [1] = { Timestamp = 1784564482 }, [2] = { Timestamp = 1784649598 }, [3] = { Timestamp = 1784779682 } },
 }

@@ -434,6 +434,31 @@ internal sealed class TaiwuTheme
         };
     }
 
+    internal void ApplySheetTabFrame(CImage image)
+    {
+        Sprite? frame = Find("ui9_btn_2_0") ?? Find("ui9_btn_three_0_0");
+        image.sprite = frame;
+        image.type = Image.Type.Sliced;
+        image.color = frame == null ? new Color(0.48f, 0.40f, 0.25f, 0.95f) : Color.white;
+        image.raycastTarget = false;
+    }
+
+    internal void ApplySheetTabChoice(CImage image, CButton button, bool selected)
+    {
+        Sprite? normal = Find(selected ? "ui9_btn_tap_1_4" : "ui9_btn_three_0_0");
+        image.sprite = normal;
+        image.type = Image.Type.Sliced;
+        image.color = normal == null ? new Color(0.08f, 0.13f, 0.13f, 1f) : Color.white;
+        button.transition = Selectable.Transition.SpriteSwap;
+        button.spriteState = new SpriteState
+        {
+            highlightedSprite = selected ? normal : Find("ui9_btn_three_0_1"),
+            pressedSprite = selected ? normal : Find("ui9_btn_three_0_1"),
+            selectedSprite = normal,
+            disabledSprite = Find("ui9_btn_three_0_3"),
+        };
+    }
+
     internal void ApplyChoiceTone(CImage image, TaiwuChoiceTone tone)
     {
         image.sprite = null;

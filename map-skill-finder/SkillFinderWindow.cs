@@ -37,6 +37,55 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         internal sbyte[] Types { get; } = Enumerable.Repeat((sbyte)-1, BookHoldingWorkspace.CombatPageCount).ToArray();
     }
 
+    private sealed class LifeAreaHoldings
+    {
+        internal LifeAreaHoldings(short areaId, BookHoldingsResponse holdings)
+        {
+            AreaId = areaId;
+            Holdings = holdings;
+        }
+
+        internal short AreaId { get; }
+        internal BookHoldingsResponse Holdings { get; }
+        internal sbyte[] States { get; } = new sbyte[BookHoldingWorkspace.LifePageCount];
+    }
+
+    private sealed class PersonAreaResults
+    {
+        internal PersonAreaResults(short areaId, PersonSearchResponse response)
+        {
+            AreaId = areaId;
+            Response = response;
+        }
+
+        internal short AreaId { get; }
+        internal PersonSearchResponse Response { get; set; }
+    }
+
+    private sealed class MerchantAreaResults
+    {
+        internal MerchantAreaResults(short areaId, MerchantSearchResponse response)
+        {
+            AreaId = areaId;
+            Response = response;
+        }
+
+        internal short AreaId { get; }
+        internal MerchantSearchResponse Response { get; set; }
+    }
+
+    private sealed class RenxiaAreaResults
+    {
+        internal RenxiaAreaResults(short areaId, RenxiaSearchResponse response)
+        {
+            AreaId = areaId;
+            Response = response;
+        }
+
+        internal short AreaId { get; }
+        internal RenxiaSearchResponse Response { get; }
+    }
+
     private sealed class BookCatalog
     {
         internal IReadOnlyList<TaiwuChoiceOption<sbyte>> CombatSects { get; init; } =
@@ -95,9 +144,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private sbyte _lifeType = -1;
     private short _lifeSkill = -1;
-    private readonly sbyte[] _lifeStates = { 0, 0, 0, 0, 0 };
-
-    private BookHoldingsResponse? _lifeHoldings;
+    private IReadOnlyList<LifeAreaHoldings> _lifeAreaHoldings = Array.Empty<LifeAreaHoldings>();
+    private readonly TaiwuSelection<short> _lifeAreaTabs = new(TaiwuSelectionMode.Single);
+    private bool _lifeSearchCacheValid;
+    private bool _lifeSearchInFlight;
+    private int _lifeSearchCompleted;
+    private int _lifeSearchTotal;
     private TaiwuBookKnowledge _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     private TaiwuBookKnowledge _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     // Holder sets mount in pages of this size to bound the live UI object count.
@@ -109,7 +161,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private readonly TaiwuSelection<sbyte> _personGenders = new(TaiwuSelectionMode.Single);
     private readonly AbilityFilterState[] _abilityFilters =
         { new(), new(), new() };
-    private PersonSearchResponse? _personResponse;
+    private IReadOnlyList<PersonAreaResults> _personAreaResults = Array.Empty<PersonAreaResults>();
+    private readonly TaiwuSelection<short> _personAreaTabs = new(TaiwuSelectionMode.Single);
+    private bool _personSearchCacheValid;
+    private bool _personSearchInFlight;
+    private int _personSearchCompleted;
+    private int _personSearchTotal;
+    private int _personSearchVersion;
     private readonly TaiwuTableModel<PersonRowView, int> _personTable = new(row => row.CharacterId,
         sort: new TaiwuValue<TaiwuSortState>(new TaiwuSortState("name", TaiwuSortDirection.Ascending)));
     // Person results live in their own dynamic host so a finished search only
@@ -131,7 +189,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         new(TaiwuSelectionMode.Multiple);
     private readonly TaiwuSelection<sbyte> _caravanState =
         new(TaiwuSelectionMode.Single, new sbyte[] { 0 });
-    private MerchantSearchResponse? _merchantResponse;
+    private IReadOnlyList<MerchantAreaResults> _merchantAreaResults = Array.Empty<MerchantAreaResults>();
+    private readonly TaiwuSelection<short> _merchantAreaTabs = new(TaiwuSelectionMode.Single);
+    private bool _merchantSearchCacheValid;
+    private bool _merchantSearchInFlight;
+    private int _merchantSearchCompleted;
+    private int _merchantSearchTotal;
+    private int _merchantSearchVersion;
     private readonly TaiwuTableModel<MerchantRowView, string> _merchantTable =
         new(row => $"{row.TargetType}:{row.EntityId}");
     // Keep merchant results in their own dynamic host so filter controls stay
@@ -141,7 +205,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private float _merchantSearchAt = -1f;
 
     private readonly TaiwuSelection<sbyte> _renxiaGrades = new(TaiwuSelectionMode.Multiple);
-    private RenxiaSearchResponse? _renxiaResponse;
+    private IReadOnlyList<RenxiaAreaResults> _renxiaAreaResults = Array.Empty<RenxiaAreaResults>();
+    private readonly TaiwuSelection<short> _renxiaAreaTabs = new(TaiwuSelectionMode.Single);
+    private bool _renxiaSearchCacheValid;
+    private bool _renxiaSearchInFlight;
+    private int _renxiaSearchCompleted;
+    private int _renxiaSearchTotal;
+    private int _renxiaSearchVersion;
     private readonly TaiwuTableModel<RenxiaRowView, int> _renxiaTable = new(row => row.Key);
     // Renxia results live in their own dynamic host so the grade filter row
     // stays mounted while an asynchronous query completes.
@@ -155,7 +225,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             return;
         _initialized = true;
         _personTable.Selection.SelectionChanged += _ => RefreshActivePage();
-        _merchantTable.InlineRowAction = row => CanMarkSelectedArea && row.BlockId >= 0
+        _merchantTable.InlineRowAction = row => CanMarkArea(row.AreaId) && row.BlockId >= 0
             ? new TaiwuMenuAction(
                 MapMarkTracker.MarkedKey == MerchantMarkKey(row) ? "已标记" : "定位",
                 () => MarkMerchantLocation(row))
@@ -169,12 +239,21 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             _activeTab = next;
             ClearStatus();
             RefreshActivePage();
-            if (next == 0 && CombatAreaSearchPlan.ShouldStartAfterCatalog(
+            if (next == 0 && AreaSearchPlan.ShouldStartAfterCatalog(
                 _combatSkill >= 0, _combatSearchCacheValid, _combatSearchInFlight))
                 StartCombatSearch();
-            if (next == 2 && _personResponse == null) SchedulePersonSearch();
-            if (next == 3 && _merchantResponse == null) ScheduleMerchantSearch();
-            if (next == 4 && _renxiaResponse == null) ScheduleRenxiaSearch();
+            if (next == 1 && AreaSearchPlan.ShouldStartAfterCatalog(
+                _lifeSkill >= 0, _lifeSearchCacheValid, _lifeSearchInFlight))
+                StartLifeSearch();
+            if (next == 2 && AreaSearchPlan.ShouldStartAfterCatalog(
+                HasPersonFilter, _personSearchCacheValid, _personSearchInFlight))
+                SchedulePersonSearch();
+            if (next == 3 && AreaSearchPlan.ShouldStartAfterCatalog(
+                true, _merchantSearchCacheValid, _merchantSearchInFlight))
+                ScheduleMerchantSearch();
+            if (next == 4 && AreaSearchPlan.ShouldStartAfterCatalog(
+                HasRenxiaFilter, _renxiaSearchCacheValid, _renxiaSearchInFlight))
+                ScheduleRenxiaSearch();
         };
         _bookSources.SelectionChanged += _ =>
         {
@@ -182,6 +261,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             MarkBookStale(1);
             if (_activeTab == 0 && _combatSkill >= 0)
                 StartCombatSearch();
+            if (_activeTab == 1 && _lifeSkill >= 0)
+                StartLifeSearch();
             RefreshActivePage();
         };
         _combatAreaTabs.SelectionChanged += _ =>
@@ -189,27 +270,36 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             _holderSetRenderLimit = HolderSetRenderPageSize;
             RefreshActivePage();
         };
+        _lifeAreaTabs.SelectionChanged += _ =>
+        {
+            _holderSetRenderLimit = HolderSetRenderPageSize;
+            RefreshActivePage();
+        };
+        _personAreaTabs.SelectionChanged += _ => RefreshActivePage();
+        _merchantAreaTabs.SelectionChanged += _ => RefreshActivePage();
+        _renxiaAreaTabs.SelectionChanged += _ => RefreshActivePage();
         foreach (AbilityFilterState filter in _abilityFilters)
         {
             // No page rebuild here: the popup card refreshes its own trigger and
             // fields, and rebuilding would destroy the open card.
-            filter.Enabled.ValueChanged += _ => SchedulePersonSearch();
-            filter.Minimum.ValueChanged += _ => SchedulePersonSearch();
+            filter.Enabled.ValueChanged += _ => { ClearPersonResults(); SchedulePersonSearch(); };
+            filter.Minimum.ValueChanged += _ => { ClearPersonResults(); SchedulePersonSearch(); };
         }
-        _personName.ValueChanged += _ => SchedulePersonSearch();
-        _personGrades.SelectionChanged += _ => SchedulePersonSearch();
-        _personGenders.SelectionChanged += _ => SchedulePersonSearch();
+        _personName.ValueChanged += _ => { ClearPersonResults(); SchedulePersonSearch(); };
+        _personGrades.SelectionChanged += _ => { ClearPersonResults(); SchedulePersonSearch(); };
+        _personGenders.SelectionChanged += _ => { ClearPersonResults(); SchedulePersonSearch(); };
         _merchantTargets.SelectionChanged += _ =>
         {
             // 商队状态 row visibility depends on the target selection.
+            ClearMerchantResults();
             ScheduleMerchantSearch();
             RefreshActivePage();
         };
-        _merchantGuilds.SelectionChanged += _ => ScheduleMerchantSearch();
-        _merchantLevels.SelectionChanged += _ => ScheduleMerchantSearch();
-        _caravanState.SelectionChanged += _ => ScheduleMerchantSearch();
+        _merchantGuilds.SelectionChanged += _ => { ClearMerchantResults(); ScheduleMerchantSearch(); };
+        _merchantLevels.SelectionChanged += _ => { ClearMerchantResults(); ScheduleMerchantSearch(); };
+        _caravanState.SelectionChanged += _ => { ClearMerchantResults(); ScheduleMerchantSearch(); };
         _renxiaTable.Selection.SelectionChanged += _ => RefreshActivePage();
-        _renxiaGrades.SelectionChanged += _ => ScheduleRenxiaSearch();
+        _renxiaGrades.SelectionChanged += _ => { ClearRenxiaResults(); ScheduleRenxiaSearch(); };
     }
 
     internal void Open()
@@ -244,24 +334,35 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             SelectArea(catalog.CurrentAreaId, markStale: false, refresh: false);
             ClearStatus();
             RefreshActivePage();
-            if (_activeTab == 0 && CombatAreaSearchPlan.ShouldStartAfterCatalog(
+            if (_activeTab == 0 && AreaSearchPlan.ShouldStartAfterCatalog(
                 _combatSkill >= 0, _combatSearchCacheValid, _combatSearchInFlight))
                 StartCombatSearch();
-            if (_activeTab == 2) SchedulePersonSearch();
-            if (_activeTab == 3) ScheduleMerchantSearch();
-            if (_activeTab == 4) ScheduleRenxiaSearch();
+            if (_activeTab == 1 && AreaSearchPlan.ShouldStartAfterCatalog(
+                _lifeSkill >= 0, _lifeSearchCacheValid, _lifeSearchInFlight))
+                StartLifeSearch();
+            if (_activeTab == 2 && AreaSearchPlan.ShouldStartAfterCatalog(
+                HasPersonFilter, _personSearchCacheValid, _personSearchInFlight))
+                SchedulePersonSearch();
+            if (_activeTab == 3 && AreaSearchPlan.ShouldStartAfterCatalog(
+                true, _merchantSearchCacheValid, _merchantSearchInFlight))
+                ScheduleMerchantSearch();
+            if (_activeTab == 4 && AreaSearchPlan.ShouldStartAfterCatalog(
+                HasRenxiaFilter, _renxiaSearchCacheValid, _renxiaSearchInFlight))
+                ScheduleRenxiaSearch();
         });
     }
 
     internal void Close()
     {
         _requestVersion++;
+        CancelInFlightSearches();
         _window?.Hide();
     }
 
     private void OnDisable()
     {
         _requestVersion++;
+        CancelInFlightSearches();
         _window?.Dispose();
         _window = null;
     }
@@ -402,12 +503,17 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             {
                 children.Add(Ui.Muted("书页组合功能已更新：请重启游戏，使后端载入新版接口。"));
             }
-            else if (_lifeHoldings == null)
+            else if (_lifeSearchInFlight)
             {
-                children.Add(Ui.Muted("先读取该地域实际持有的书页，再从可用状态中点选目标。"));
-                children.Add(ActionRow(LoadLifeHoldings, ResetLife, "读取技艺书持有情况"));
+                children.Add(Ui.Muted(_lifeSearchCompleted == 0
+                    ? "正在搜索技艺书……"
+                    : $"正在搜索全地图（{_lifeSearchCompleted}/{_lifeSearchTotal}）……"));
             }
-            else children.Add(BuildLifeHoldingWorkspace());
+            else if (_lifeAreaHoldings.Count == 0)
+            {
+                children.Add(Ui.Muted("未找到此技艺书的持有人。"));
+            }
+            else children.Add(BuildLifeAreaTabs());
         }
         return Ui.Column(children.ToArray()) with { Key = "life-content" };
     }
@@ -591,7 +697,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             .ToArray();
         elements.Add(Ui.FilterButtons("具体技艺书", Selection(_lifeSkill, value =>
         {
-            _lifeSkill = value; MarkBookStale(1); RefreshActivePage();
+            _lifeSkill = value;
+            MarkBookStale(1);
+            if (_activeTab == 1) StartLifeSearch();
+            RefreshActivePage();
         }), skills.Select(skill => new TaiwuChoiceOption<short>(skill.TemplateId,
             $"{skill.Name}·{GradeName(skill.Grade)}")).ToArray(), compact: true)
             with { Key = "life-skill" });
@@ -610,7 +719,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             new TaiwuChoiceOption<short>(area.AreaId,
                 $"{AreaName(area.AreaId)} {area.Holdings.Holders.Count}")).ToArray();
         return Ui.Column(
-            Ui.SelectButtons(_combatAreaTabs, sheets, compact: true)
+            Ui.SheetTabs(_combatAreaTabs, sheets)
                 with { Key = "combat-area-sheets" },
             Ui.Spacer(10f),
             BuildCombatHoldingWorkspace(selected)) with { Key = "combat-area-tabs" };
@@ -635,20 +744,30 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
         return BuildHoldingWorkspace(
             Ui.Column(left.ToArray()) with { Key = $"combat-{area.AreaId}-page-picker-list" },
-            sets, StartCombatSearch, ResetCombat, "combat-" + area.AreaId, area.AreaId);
+            sets, () => StartCombatSearch(forceFullMap: false), () => StartCombatSearch(forceFullMap: true),
+            ResetCombat, "combat-" + area.AreaId, area.AreaId);
     }
 
-    private UiElement BuildLifeHoldingWorkspace()
+    private UiElement BuildLifeAreaTabs()
     {
-        if (_lifeHoldings == null)
+        LifeAreaHoldings? selected = SelectedLifeAreaHoldings;
+        if (selected == null)
             return Ui.Spacer();
-        if (!_lifeHoldings.Success)
-            return Ui.Column(
-                Ui.Muted(_lifeHoldings.Message),
-                ActionRow(LoadLifeHoldings, ResetLife, "重新读取持有情况"));
 
-        IReadOnlyList<BookHolderView> holders = _lifeHoldings.Holders;
-        IReadOnlyList<PageTargetChoice> targets = _lifeStates
+        TaiwuChoiceOption<short>[] sheets = _lifeAreaHoldings.Select(area =>
+            new TaiwuChoiceOption<short>(area.AreaId,
+                $"{AreaName(area.AreaId)} {area.Holdings.Holders.Count}")).ToArray();
+        return Ui.Column(
+            Ui.SheetTabs(_lifeAreaTabs, sheets)
+                with { Key = "life-area-sheets" },
+            Ui.Spacer(10f),
+            BuildLifeHoldingWorkspace(selected)) with { Key = "life-area-tabs" };
+    }
+
+    private UiElement BuildLifeHoldingWorkspace(LifeAreaHoldings area)
+    {
+        IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
+        IReadOnlyList<PageTargetChoice> targets = area.States
             .Select(state => new PageTargetChoice(-1, state))
             .ToArray();
         IReadOnlyList<BookHolderSet> sets = BookHoldingWorkspace.FindHolderSets(holders, targets, combat: false);
@@ -658,19 +777,21 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             Ui.Muted($"{holders.Count} 人持有此书。点击实际存在的书页状态；默认优先选择持有人最多的完整状态。"),
         };
         for (int page = 0; page < BookHoldingWorkspace.LifePageCount; page++)
-            left.Add(BuildLifeHoldingPagePicker(holders, page));
+            left.Add(BuildLifeHoldingPagePicker(area, page));
         if (TaiwuPageMarking.HasAnyMark(_lifeTaiwuKnowledge))
             left.Add(Ui.Muted("绿色背景 = 太吾已有或已读的书页，无需再寻。"));
 
         return BuildHoldingWorkspace(
-            Ui.Column(left.ToArray()) with { Key = "life-page-picker-list" },
-            sets, LoadLifeHoldings, ResetLife, "life", _selectedAreaId);
+            Ui.Column(left.ToArray()) with { Key = $"life-{area.AreaId}-page-picker-list" },
+            sets, () => StartLifeSearch(forceFullMap: false), () => StartLifeSearch(forceFullMap: true),
+            ResetLife, "life-" + area.AreaId, area.AreaId);
     }
 
     private UiElement BuildHoldingWorkspace(
         UiElement pagePane,
         IReadOnlyList<BookHolderSet> sets,
         Action reload,
+        Action searchFullMap,
         Action reset,
         string key,
         short areaId)
@@ -713,6 +834,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 Ui.Heading("需要寻访的人"),
                 Ui.Flex(Ui.Spacer(0)),
                 Ui.Button("重新读取", reload,
+                    new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
+                Ui.Button("搜索全图", searchFullMap,
                     new TaiwuButtonOptions { Width = 200f, Style = TaiwuButtonStyle.Secondary }),
                 Ui.ResetIcon(reset)) with { Key = key + "-holding-header" },
             Ui.Muted(sets.Count == 0
@@ -759,11 +882,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         }), options.ToArray(), compact: true) with { Key = $"combat-{area.AreaId}-holding-page-{page}" };
     }
 
-    private UiElement BuildLifeHoldingPagePicker(IReadOnlyList<BookHolderView> holders, int page)
+    private UiElement BuildLifeHoldingPagePicker(LifeAreaHoldings area, int page)
     {
+        IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         IReadOnlyList<BookPageAvailability> availability =
             BookHoldingWorkspace.GetPageAvailability(holders, page, combat: false);
-        PageTargetChoice selected = new(-1, _lifeStates[page]);
+        PageTargetChoice selected = new(-1, area.States[page]);
         string title = $"第{page + 1}页";
         if (availability.Count == 0)
             return Ui.Column(Ui.Heading(title), Ui.Muted("无可用书页"));
@@ -778,9 +902,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_lifeTaiwuKnowledge, page, item.Target))));
         return Ui.FilterButtons(title, Selection(selected, value =>
         {
-            _lifeStates[page] = value.State;
+            area.States[page] = value.State;
             RefreshActivePage();
-        }), options.ToArray(), compact: true) with { Key = $"life-holding-page-{page}" };
+        }), options.ToArray(), compact: true) with { Key = $"life-{area.AreaId}-holding-page-{page}" };
     }
 
     private static string LifePageTargetLabel(sbyte state) =>
@@ -958,11 +1082,31 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private UiElement BuildPersonResults()
     {
-        if (_personResponse == null)
+        if (_personSearchInFlight)
+            return Ui.Muted(_personSearchCompleted == 0
+                ? "正在搜索人物……"
+                : $"正在搜索全地图（{_personSearchCompleted}/{_personSearchTotal}）……") with { Key = "person-loading" };
+        if (!_personSearchCacheValid)
             return Ui.Muted("设置至少一个筛选条件后自动查找。") with { Key = "person-empty" };
-        if (!_personResponse.Success)
-            return Ui.Muted(_personResponse.Message) with { Key = "person-error" };
-        _personTable.SetItems(_personResponse.People);
+        if (_personAreaResults.Count == 0)
+            return Ui.Muted("未找到符合条件的人物。") with { Key = "person-no-results" };
+
+        PersonAreaResults selected = SelectedPersonAreaResults!;
+        TaiwuChoiceOption<short>[] sheets = _personAreaResults.Select(area =>
+            new TaiwuChoiceOption<short>(area.AreaId,
+                $"{AreaName(area.AreaId)} {area.Response.TotalCount}")).ToArray();
+        return Ui.Column(
+            Ui.SheetTabs(_personAreaTabs, sheets)
+                with { Key = "person-area-sheets" },
+            Ui.Spacer(10f),
+            BuildPersonResults(selected.Response)) with { Key = "person-area-tabs" };
+    }
+
+    private UiElement BuildPersonResults(PersonSearchResponse response)
+    {
+        if (!response.Success)
+            return Ui.Muted(response.Message) with { Key = "person-error" };
+        _personTable.SetItems(response.People);
         PersonRowView? selected = Selected(_personTable);
         var columns = new List<TaiwuTableColumn<PersonRowView>>
         {
@@ -983,17 +1127,21 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 190f, true, row => row.Abilities.FirstOrDefault(value =>
                     value.LifeSkillType == type && value.Metric == metric)?.Total ?? -1));
         }
-        string title = _personResponse.People.Count < _personResponse.TotalCount
-            ? $"人物结果 · 已加载 {_personResponse.People.Count}/{_personResponse.TotalCount} 人"
-            : $"人物结果 · {_personResponse.TotalCount} 人 · {_personResponse.ElapsedMs} ms";
-        int remaining = _personResponse.TotalCount - _personResponse.People.Count;
+        string title = response.People.Count < response.TotalCount
+            ? $"人物结果 · 已加载 {response.People.Count}/{response.TotalCount} 人"
+            : $"人物结果 · {response.TotalCount} 人 · {response.ElapsedMs} ms";
+        int remaining = response.TotalCount - response.People.Count;
         return Ui.Column(
             Ui.Row(
                 Ui.Heading(title),
                 Ui.Flex(Ui.Spacer(0)),
+                Ui.Button("重新读取", SearchPeople,
+                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
+                Ui.Button("搜索全图", () => SearchPeople(forceFullMap: true),
+                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
                 remaining > 0
                     ? Ui.Button($"继续加载 {remaining} 人",
-                        () => SearchPeople(_personResponse.Page + 1, append: true),
+                        LoadMorePeople,
                         new TaiwuButtonOptions { Width = 260f, Style = TaiwuButtonStyle.Secondary })
                     : Ui.Spacer(0)) with { Key = "person-results-header" },
             Ui.Row(
@@ -1022,7 +1170,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             }
             else rows.Add(Ui.Text($"{skill}造诣 {ability.Total}"));
         }
-        if (CanMarkSelectedArea && person.BlockId >= 0)
+        if (CanMarkArea(person.AreaId) && person.BlockId >= 0)
         {
             string markKey = "person:" + person.CharacterId;
             rows.Add(Ui.Spacer(8f));
@@ -1036,12 +1184,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private void MarkPersonLocation(PersonRowView person, string markKey)
     {
-        if (!CanMarkSelectedArea)
+        if (!CanMarkArea(person.AreaId))
         {
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
-        TryMarkLocations(new List<Location> { new(person.AreaId, person.BlockId) }, markKey);
+        TryMarkLocations(new List<Location> { new(person.AreaId, person.BlockId) }, markKey, person.AreaId);
     }
 
     private UiElement BuildMerchantPage()
@@ -1073,11 +1221,31 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private UiElement BuildMerchantResults()
     {
-        if (_merchantResponse == null)
+        if (_merchantSearchInFlight)
+            return Ui.Muted(_merchantSearchCompleted == 0
+                ? "正在搜索商会目标……"
+                : $"正在搜索全地图（{_merchantSearchCompleted}/{_merchantSearchTotal}）……") with { Key = "merchant-loading" };
+        if (!_merchantSearchCacheValid)
             return Ui.Muted("变更筛选条件后自动查找。") with { Key = "merchant-empty" };
-        if (!_merchantResponse.Success)
-            return Ui.Muted(_merchantResponse.Message) with { Key = "merchant-error" };
-        _merchantTable.SetItems(_merchantResponse.Rows);
+        if (_merchantAreaResults.Count == 0)
+            return Ui.Muted("未找到符合条件的商会目标。") with { Key = "merchant-no-results" };
+
+        MerchantAreaResults selected = SelectedMerchantAreaResults!;
+        TaiwuChoiceOption<short>[] sheets = _merchantAreaResults.Select(area =>
+            new TaiwuChoiceOption<short>(area.AreaId,
+                $"{AreaName(area.AreaId)} {area.Response.TotalCount}")).ToArray();
+        return Ui.Column(
+            Ui.SheetTabs(_merchantAreaTabs, sheets)
+                with { Key = "merchant-area-sheets" },
+            Ui.Spacer(10f),
+            BuildMerchantResults(selected.Response)) with { Key = "merchant-area-tabs" };
+    }
+
+    private UiElement BuildMerchantResults(MerchantSearchResponse response)
+    {
+        if (!response.Success)
+            return Ui.Muted(response.Message) with { Key = "merchant-error" };
+        _merchantTable.SetItems(response.Rows);
         var columns = new[]
         {
             new TaiwuTableColumn<MerchantRowView>("name", "名称", row => row.Name, 400f, true, row => row.Name),
@@ -1092,14 +1260,18 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             new TaiwuTableColumn<MerchantRowView>("location", "所在地", row => $"地格 {row.BlockId}",
                 180f, true, row => row.BlockId),
         };
-        int remaining = _merchantResponse.TotalCount - _merchantResponse.Rows.Count;
+        int remaining = response.TotalCount - response.Rows.Count;
         return Ui.Column(
             Ui.Row(
-                Ui.Heading($"商会结果 · {_merchantResponse.TotalCount} 项 · {_merchantResponse.ElapsedMs} ms"),
+                Ui.Heading($"商会结果 · {response.TotalCount} 项 · {response.ElapsedMs} ms"),
                 Ui.Flex(Ui.Spacer(0)),
+                Ui.Button("重新读取", SearchMerchants,
+                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
+                Ui.Button("搜索全图", () => SearchMerchants(forceFullMap: true),
+                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
                 remaining > 0
                     ? Ui.Button($"继续加载 {remaining} 项",
-                        () => SearchMerchants(_merchantResponse.Page + 1, append: true),
+                        LoadMoreMerchants,
                         new TaiwuButtonOptions { Width = 260f, Style = TaiwuButtonStyle.Secondary })
                     : Ui.Spacer(0)) with { Key = "merchant-results-header" },
             Ui.Table(_merchantTable, columns,
@@ -1112,12 +1284,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private void MarkMerchantLocation(MerchantRowView row)
     {
-        if (!CanMarkSelectedArea)
+        if (!CanMarkArea(row.AreaId))
         {
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
-        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) }, MerchantMarkKey(row));
+        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) }, MerchantMarkKey(row), row.AreaId);
     }
 
     private UiElement BuildRenxiaPage()
@@ -1141,11 +1313,31 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private UiElement BuildRenxiaResults()
     {
-        if (_renxiaResponse == null)
+        if (_renxiaSearchInFlight)
+            return Ui.Muted(_renxiaSearchCompleted == 0
+                ? "正在搜索任侠……"
+                : $"正在搜索全地图（{_renxiaSearchCompleted}/{_renxiaSearchTotal}）……") with { Key = "renxia-loading" };
+        if (!_renxiaSearchCacheValid)
             return Ui.Muted("选择品级后自动查找。") with { Key = "renxia-empty" };
-        if (!_renxiaResponse.Success)
-            return Ui.Muted(_renxiaResponse.Message) with { Key = "renxia-error" };
-        _renxiaTable.SetItems(_renxiaResponse.Rows);
+        if (_renxiaAreaResults.Count == 0)
+            return Ui.Muted("未找到符合条件的任侠。") with { Key = "renxia-no-results" };
+
+        RenxiaAreaResults selectedArea = SelectedRenxiaAreaResults!;
+        TaiwuChoiceOption<short>[] sheets = _renxiaAreaResults.Select(area =>
+            new TaiwuChoiceOption<short>(area.AreaId,
+                $"{AreaName(area.AreaId)} {area.Response.TotalCount}")).ToArray();
+        return Ui.Column(
+            Ui.SheetTabs(_renxiaAreaTabs, sheets)
+                with { Key = "renxia-area-sheets" },
+            Ui.Spacer(10f),
+            BuildRenxiaResults(selectedArea.Response)) with { Key = "renxia-area-tabs" };
+    }
+
+    private UiElement BuildRenxiaResults(RenxiaSearchResponse response)
+    {
+        if (!response.Success)
+            return Ui.Muted(response.Message) with { Key = "renxia-error" };
+        _renxiaTable.SetItems(response.Rows);
         RenxiaRowView? selected = Selected(_renxiaTable);
         var columns = new[]
         {
@@ -1157,8 +1349,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         };
         return Ui.Column(
             Ui.Row(
-                Ui.Heading($"任侠结果 · {_renxiaResponse.TotalCount} 个 · {_renxiaResponse.ElapsedMs} ms"),
-                Ui.Flex(Ui.Spacer(0))) with { Key = "renxia-results-header" },
+                Ui.Heading($"任侠结果 · {response.TotalCount} 个 · {response.ElapsedMs} ms"),
+                Ui.Flex(Ui.Spacer(0)),
+                Ui.Button("重新读取", SearchRenxia,
+                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary }),
+                Ui.Button("搜索全图", () => SearchRenxia(forceFullMap: true),
+                    new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Secondary })) with { Key = "renxia-results-header" },
             Ui.Row(
                 Ui.Flex(Ui.Table(_renxiaTable, columns,
                     new TaiwuTableOptions { Height = 700f, RowHeight = 70f }), 2f),
@@ -1173,7 +1369,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             Ui.Heading(row.Name),
             Ui.Text($"任侠 · {GradeName(row.Grade)} · 地格 {row.BlockId}"),
         };
-        if (CanMarkSelectedArea && row.BlockId >= 0)
+        if (CanMarkArea(row.AreaId) && row.BlockId >= 0)
         {
             string markKey = $"renxia:{row.TemplateId}@{row.AreaId}:{row.BlockId}";
             rows.Add(Ui.Spacer(8f));
@@ -1187,12 +1383,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private void MarkRenxiaLocation(RenxiaRowView row, string markKey)
     {
-        if (!CanMarkSelectedArea)
+        if (!CanMarkArea(row.AreaId))
         {
             SetStatus("仅能标记太吾当前所在地域的地格。");
             return;
         }
-        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) }, markKey);
+        TryMarkLocations(new List<Location> { new(row.AreaId, row.BlockId) }, markKey, row.AreaId);
     }
 
     private UiElement ActionRow(Action search, Action reset, string label) => Ui.Row(
@@ -1213,7 +1409,44 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         }
     }
 
-    private void StartCombatSearch()
+    private LifeAreaHoldings? SelectedLifeAreaHoldings
+    {
+        get
+        {
+            if (_lifeAreaHoldings.Count == 0)
+                return null;
+            short selectedAreaId = _lifeAreaTabs.Selected.Count == 0
+                ? _lifeAreaHoldings[0].AreaId
+                : _lifeAreaTabs.Selected.First();
+            return _lifeAreaHoldings.FirstOrDefault(area => area.AreaId == selectedAreaId)
+                ?? _lifeAreaHoldings[0];
+        }
+    }
+
+    private PersonAreaResults? SelectedPersonAreaResults =>
+        SelectedAreaResult(_personAreaResults, _personAreaTabs, result => result.AreaId);
+
+    private MerchantAreaResults? SelectedMerchantAreaResults =>
+        SelectedAreaResult(_merchantAreaResults, _merchantAreaTabs, result => result.AreaId);
+
+    private RenxiaAreaResults? SelectedRenxiaAreaResults =>
+        SelectedAreaResult(_renxiaAreaResults, _renxiaAreaTabs, result => result.AreaId);
+
+    private static T? SelectedAreaResult<T>(
+        IReadOnlyList<T> results,
+        TaiwuSelection<short> selection,
+        Func<T, short> areaId)
+        where T : class
+    {
+        if (results.Count == 0)
+            return null;
+        short selectedAreaId = selection.Selected.Count == 0
+            ? areaId(results[0])
+            : selection.Selected.First();
+        return results.FirstOrDefault(result => areaId(result) == selectedAreaId) ?? results[0];
+    }
+
+    private void StartCombatSearch(bool forceFullMap = false)
     {
         if (_combatSkill < 0 || _catalog == null) return;
         if (!SupportsBookHoldingWorkspace)
@@ -1232,7 +1465,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             return;
         }
 
-        IReadOnlyList<short> areas = CombatAreaSearchPlan.BuildSearchOrder(
+        IReadOnlyList<short> areas = AreaSearchPlan.BuildSearchOrder(
             _catalog.Areas.Select(area => area.AreaId), _catalog.CurrentAreaId);
         if (areas.Count == 0)
         {
@@ -1247,11 +1480,11 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _combatSearchCompleted = 0;
         _combatSearchTotal = areas.Count;
         _combatAreaHoldings = Array.Empty<CombatAreaHoldings>();
-        _combatAreaTabs.Clear();
+        _combatAreaTabs.Replace(Array.Empty<short>(), notify: false);
         _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
         SetStatus("正在读取当前地域的持有情况……");
         RefreshActivePage();
-        SearchCombatArea(version, areas, 0, sourceMask, new List<CombatAreaHoldings>());
+        SearchCombatArea(version, areas, 0, sourceMask, forceFullMap, new List<CombatAreaHoldings>());
     }
 
     private void SearchCombatArea(
@@ -1259,6 +1492,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         IReadOnlyList<short> areas,
         int index,
         byte sourceMask,
+        bool forceFullMap,
         List<CombatAreaHoldings> results)
     {
         FinderBackendClient.GetBookHoldings(new BookHoldingsRequestView(
@@ -1275,7 +1509,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                     RefreshActivePage();
                     return;
                 }
-                SearchNextCombatArea(version, areas, index, sourceMask, results);
+                SearchNextCombatArea(version, areas, index, sourceMask, forceFullMap, results);
                 return;
             }
 
@@ -1287,13 +1521,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             if (response.Holders.Count > 0)
                 results.Add(CreateCombatAreaHoldings(areas[index], response));
 
-            // A local hit is immediately useful and avoids an unnecessary full-map scan.
-            if (index == 0 && results.Count > 0)
+            if (index == 0 && !AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+                currentAreaHasResults: results.Count > 0, forceFullMap))
             {
                 CompleteCombatSearch(results);
                 return;
             }
-            SearchNextCombatArea(version, areas, index, sourceMask, results);
+            SearchNextCombatArea(version, areas, index, sourceMask, forceFullMap, results);
         });
     }
 
@@ -1302,6 +1536,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         IReadOnlyList<short> areas,
         int index,
         byte sourceMask,
+        bool forceFullMap,
         List<CombatAreaHoldings> results)
     {
         int next = index + 1;
@@ -1311,14 +1546,14 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             return;
         }
         SetStatus($"正在搜索全地图（{_combatSearchCompleted}/{_combatSearchTotal}）……");
-        SearchCombatArea(version, areas, next, sourceMask, results);
+        SearchCombatArea(version, areas, next, sourceMask, forceFullMap, results);
     }
 
     private void CompleteCombatSearch(IReadOnlyList<CombatAreaHoldings> results)
     {
         _combatSearchInFlight = false;
         _combatSearchCacheValid = true;
-        _combatAreaHoldings = CombatAreaSearchPlan.OrderByResultCount(
+        _combatAreaHoldings = AreaSearchPlan.OrderByResultCount(
             results, area => area.Holdings.Holders.Count, area => area.AreaId);
         _combatAreaTabs.Replace(_combatAreaHoldings.Take(1).Select(area => area.AreaId), notify: false);
         _holderSetRenderLimit = HolderSetRenderPageSize;
@@ -1360,9 +1595,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         }
     }
 
-    private void LoadLifeHoldings()
+    private void StartLifeSearch(bool forceFullMap = false)
     {
-        if (_selectedAreaId < 0 || _lifeSkill < 0) return;
+        if (_lifeSkill < 0 || _catalog == null) return;
         if (!SupportsBookHoldingWorkspace)
         {
             SetStatus("书页组合功能需要重启游戏后才能使用。新版后端尚未载入。");
@@ -1377,36 +1612,118 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             return;
         }
 
-        SetStatus("正在读取该技艺的持有人与书页状态……");
+        IReadOnlyList<short> areas = AreaSearchPlan.BuildSearchOrder(
+            _catalog.Areas.Select(area => area.AreaId), _catalog.CurrentAreaId);
+        if (areas.Count == 0)
+        {
+            SetStatus("没有可查询的地域。");
+            RefreshActivePage();
+            return;
+        }
+
         int version = ++_lifeHoldingsVersion;
+        _lifeSearchCacheValid = false;
+        _lifeSearchInFlight = true;
+        _lifeSearchCompleted = 0;
+        _lifeSearchTotal = areas.Count;
+        _lifeAreaHoldings = Array.Empty<LifeAreaHoldings>();
+        _lifeAreaTabs.Replace(Array.Empty<short>(), notify: false);
+        _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+        SetStatus("正在读取当前地域的持有情况……");
+        RefreshActivePage();
+        SearchLifeArea(version, areas, 0, sourceMask, forceFullMap, new List<LifeAreaHoldings>());
+    }
+
+    private void SearchLifeArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        byte sourceMask,
+        bool forceFullMap,
+        List<LifeAreaHoldings> results)
+    {
         FinderBackendClient.GetBookHoldings(new BookHoldingsRequestView(
-            _selectedAreaId, 1, _lifeSkill, sourceMask), response =>
+            areas[index], 1, _lifeSkill, sourceMask), response =>
         {
             if (version != _lifeHoldingsVersion || _window?.IsShowing != true) return;
-            _lifeHoldings = response;
-            _lifeTaiwuKnowledge = response.Success
-                ? BookHoldingWorkspace.BuildTaiwuKnowledge(
-                    response.TaiwuBooks, response.TaiwuReadingState, combat: false)
-                : TaiwuBookKnowledge.Empty;
-            _holderSetRenderLimit = HolderSetRenderPageSize;
-            if (response.Success)
+            _lifeSearchCompleted++;
+            if (!response.Success)
             {
-                ApplyLifeHoldingDefaults(response.Holders);
-                SetStatus($"已读取 {response.Holders.Count} 位持有人 · {response.ElapsedMs} ms");
+                if (index == 0)
+                {
+                    _lifeSearchInFlight = false;
+                    SetStatus(response.Message);
+                    RefreshActivePage();
+                    return;
+                }
+                SearchNextLifeArea(version, areas, index, sourceMask, forceFullMap, results);
+                return;
             }
-            else SetStatus(response.Message);
-            RefreshActivePage();
+
+            if (index == 0)
+            {
+                _lifeTaiwuKnowledge = BookHoldingWorkspace.BuildTaiwuKnowledge(
+                    response.TaiwuBooks, response.TaiwuReadingState, combat: false);
+            }
+            if (response.Holders.Count > 0)
+                results.Add(CreateLifeAreaHoldings(areas[index], response));
+
+            if (index == 0 && !AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+                currentAreaHasResults: results.Count > 0, forceFullMap))
+            {
+                CompleteLifeSearch(results);
+                return;
+            }
+            SearchNextLifeArea(version, areas, index, sourceMask, forceFullMap, results);
         });
     }
 
-    private void ApplyLifeHoldingDefaults(IReadOnlyList<BookHolderView> holders)
+    private void SearchNextLifeArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        byte sourceMask,
+        bool forceFullMap,
+        List<LifeAreaHoldings> results)
     {
+        int next = index + 1;
+        if (next >= areas.Count)
+        {
+            CompleteLifeSearch(results);
+            return;
+        }
+        SetStatus($"正在搜索全地图（{_lifeSearchCompleted}/{_lifeSearchTotal}）……");
+        SearchLifeArea(version, areas, next, sourceMask, forceFullMap, results);
+    }
+
+    private void CompleteLifeSearch(IReadOnlyList<LifeAreaHoldings> results)
+    {
+        _lifeSearchInFlight = false;
+        _lifeSearchCacheValid = true;
+        _lifeAreaHoldings = AreaSearchPlan.OrderByResultCount(
+            results, area => area.Holdings.Holders.Count, area => area.AreaId);
+        _lifeAreaTabs.Replace(_lifeAreaHoldings.Take(1).Select(area => area.AreaId), notify: false);
+        _holderSetRenderLimit = HolderSetRenderPageSize;
+        ClearStatus();
+        RefreshActivePage();
+    }
+
+    private LifeAreaHoldings CreateLifeAreaHoldings(short areaId, BookHoldingsResponse holdings)
+    {
+        var area = new LifeAreaHoldings(areaId, holdings);
+        ApplyLifeHoldingDefaults(area);
+        return area;
+    }
+
+    private void ApplyLifeHoldingDefaults(LifeAreaHoldings area)
+    {
+        IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         for (int page = 0; page < BookHoldingWorkspace.LifePageCount; page++)
         {
             // 太吾已拥有或已读的书页无需寻访，默认"不限"。
             if (TaiwuPageMarking.IsPageFullyCoveredByTaiwu(_lifeTaiwuKnowledge, page))
             {
-                _lifeStates[page] = AnyPageTarget.State;
+                area.States[page] = AnyPageTarget.State;
                 continue;
             }
             BookPageAvailability? preferred = BookHoldingWorkspace.GetPageAvailability(holders, page, combat: false)
@@ -1416,7 +1733,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 .FirstOrDefault();
             preferred ??= BookHoldingWorkspace.GetPageAvailability(holders, page, combat: false).FirstOrDefault();
             if (preferred != null)
-                _lifeStates[page] = preferred.Target.State;
+                area.States[page] = preferred.Target.State;
         }
     }
 
@@ -1439,8 +1756,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 if (HasPersonFilter) SearchPeople();
                 else
                 {
-                    // No filter set: stay on the hint instead of listing the whole area.
-                    _personResponse = null;
+                    // No filter set: stay on the hint instead of listing the whole map.
+                    ClearPersonResults();
                     _personResultsContent.SetValue(BuildPersonResults());
                 }
             }
@@ -1463,8 +1780,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 if (HasRenxiaFilter) SearchRenxia();
                 else
                 {
-                    // No grade selected: stay on the hint instead of listing the whole area.
-                    _renxiaResponse = null;
+                    // No grade selected: stay on the hint instead of listing the whole map.
+                    ClearRenxiaResults();
                     _renxiaResultsContent.SetValue(BuildRenxiaResults());
                 }
             }
@@ -1499,9 +1816,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             MarkAllStale();
             RefreshActivePage();
             if (_activeTab == 0 && _combatSkill >= 0) StartCombatSearch();
-            if (_activeTab == 2) SchedulePersonSearch();
+            if (_activeTab == 1 && _lifeSkill >= 0) StartLifeSearch();
+            if (_activeTab == 2 && HasPersonFilter) SchedulePersonSearch();
             if (_activeTab == 3) ScheduleMerchantSearch();
-            if (_activeTab == 4) ScheduleRenxiaSearch();
+            if (_activeTab == 4 && HasRenxiaFilter) ScheduleRenxiaSearch();
         });
     }
 
@@ -1523,77 +1841,320 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _personGenders.Selected.Count > 0 ||
         _abilityFilters.Any(filter => filter.Enabled.Value);
 
-    private void SearchPeople() => SearchPeople(0, append: false);
-
-    private void SearchPeople(int page, bool append)
+    private PersonSearchRequestView CreatePersonRequest(short areaId, int page = 0)
     {
-        if (_selectedAreaId < 0) return;
         int gradeMask = _personGrades.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
         var abilities = _abilityFilters.Where(filter => filter.Enabled.Value)
             .Select(filter => new AbilityConditionView(filter.LifeSkillType, filter.Metric,
                 checked((short)Math.Round(filter.Minimum.Value)))).ToArray();
         sbyte gender = _personGenders.Selected.Count == 0 ? (sbyte)-1 : _personGenders.Selected.First();
-        var request = new PersonSearchRequestView(_selectedAreaId, _personName.Value, gradeMask,
-            0, 200, gender,
-            Array.Empty<sbyte>(), abilities, page, 200);
+        return new PersonSearchRequestView(areaId, _personName.Value, gradeMask,
+            0, 200, gender, Array.Empty<sbyte>(), abilities, page, 200);
+    }
+
+    private void SearchPeople() => SearchPeople(forceFullMap: false);
+
+    private void SearchPeople(bool forceFullMap)
+    {
+        if (_catalog == null || !HasPersonFilter) return;
+        IReadOnlyList<short> areas = AreaSearchPlan.BuildSearchOrder(
+            _catalog.Areas.Select(area => area.AreaId), _catalog.CurrentAreaId);
+        if (areas.Count == 0) return;
+
+        int version = ++_personSearchVersion;
+        _personSearchCacheValid = false;
+        _personSearchInFlight = true;
+        _personSearchCompleted = 0;
+        _personSearchTotal = areas.Count;
+        _personAreaResults = Array.Empty<PersonAreaResults>();
+        _personAreaTabs.Replace(Array.Empty<short>(), notify: false);
         SetStatus("正在查询人物……");
-        int version = ++_requestVersion;
-        FinderBackendClient.SearchPeople(request, response =>
+        _personResultsContent.SetValue(BuildPersonResults());
+        SearchPersonArea(version, areas, 0, forceFullMap, new List<PersonAreaResults>());
+    }
+
+    private void SearchPersonArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        bool forceFullMap,
+        List<PersonAreaResults> results)
+    {
+        FinderBackendClient.SearchPeople(CreatePersonRequest(areas[index]), response =>
         {
-            if (!Accept(version)) return;
-            if (append && _personResponse != null && response.Success)
-                response = response with { People = _personResponse.People.Concat(response.People).ToArray() };
-            _personResponse = response;
-            _personTable.SetItems(response.People);
-            SetStatus(response.Success ? $"找到 {response.TotalCount} 人 · {response.ElapsedMs} ms" : response.Message);
+            if (version != _personSearchVersion || _window?.IsShowing != true) return;
+            _personSearchCompleted++;
+            if (!response.Success)
+            {
+                if (index == 0)
+                {
+                    _personSearchInFlight = false;
+                    SetStatus(response.Message);
+                    _personResultsContent.SetValue(BuildPersonResults());
+                    return;
+                }
+                SearchNextPersonArea(version, areas, index, forceFullMap, results);
+                return;
+            }
+
+            if (response.TotalCount > 0)
+                results.Add(new PersonAreaResults(areas[index], response));
+            if (index == 0 && !AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+                currentAreaHasResults: results.Count > 0, forceFullMap))
+            {
+                CompletePersonSearch(results);
+                return;
+            }
+            SearchNextPersonArea(version, areas, index, forceFullMap, results);
+        });
+    }
+
+    private void SearchNextPersonArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        bool forceFullMap,
+        List<PersonAreaResults> results)
+    {
+        int next = index + 1;
+        if (next >= areas.Count)
+        {
+            CompletePersonSearch(results);
+            return;
+        }
+        SetStatus($"正在搜索全地图（{_personSearchCompleted}/{_personSearchTotal}）……");
+        SearchPersonArea(version, areas, next, forceFullMap, results);
+    }
+
+    private void CompletePersonSearch(IReadOnlyList<PersonAreaResults> results)
+    {
+        _personSearchInFlight = false;
+        _personSearchCacheValid = true;
+        _personAreaResults = AreaSearchPlan.OrderByResultCount(
+            results, area => area.Response.TotalCount, area => area.AreaId);
+        _personAreaTabs.Replace(_personAreaResults.Take(1).Select(area => area.AreaId), notify: false);
+        ClearStatus();
+        _personResultsContent.SetValue(BuildPersonResults());
+    }
+
+    private void LoadMorePeople()
+    {
+        PersonAreaResults? area = SelectedPersonAreaResults;
+        if (area == null || !area.Response.Success || area.Response.People.Count >= area.Response.TotalCount)
+            return;
+        int version = ++_personSearchVersion;
+        SetStatus("正在加载更多人物……");
+        FinderBackendClient.SearchPeople(CreatePersonRequest(area.AreaId, area.Response.Page + 1), response =>
+        {
+            if (version != _personSearchVersion || _window?.IsShowing != true || !response.Success) return;
+            area.Response = response with { People = area.Response.People.Concat(response.People).ToArray() };
+            ClearStatus();
             _personResultsContent.SetValue(BuildPersonResults());
         });
     }
 
-    private void SearchMerchants() => SearchMerchants(0, append: false);
-
-    private void SearchMerchants(int page, bool append)
+    private MerchantSearchRequestView CreateMerchantRequest(short areaId, int page = 0)
     {
-        if (_selectedAreaId < 0) return;
         int targetMask = _merchantTargets.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
         int guildMask = _merchantGuilds.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
         int levelMask = _merchantLevels.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
         sbyte caravanState = _caravanState.Selected.Count == 0 ? (sbyte)0 : _caravanState.Selected.First();
+        return new MerchantSearchRequestView(areaId, targetMask, guildMask, levelMask, caravanState, page, 100);
+    }
+
+    private void SearchMerchants() => SearchMerchants(forceFullMap: false);
+
+    private void SearchMerchants(bool forceFullMap)
+    {
+        if (_catalog == null) return;
+        IReadOnlyList<short> areas = AreaSearchPlan.BuildSearchOrder(
+            _catalog.Areas.Select(area => area.AreaId), _catalog.CurrentAreaId);
+        if (areas.Count == 0) return;
+
+        int version = ++_merchantSearchVersion;
+        _merchantSearchCacheValid = false;
+        _merchantSearchInFlight = true;
+        _merchantSearchCompleted = 0;
+        _merchantSearchTotal = areas.Count;
+        _merchantAreaResults = Array.Empty<MerchantAreaResults>();
+        _merchantAreaTabs.Replace(Array.Empty<short>(), notify: false);
         SetStatus("正在查询商会目标……");
-        int version = ++_requestVersion;
-        FinderBackendClient.SearchMerchants(new MerchantSearchRequestView(_selectedAreaId,
-            targetMask, guildMask, levelMask, caravanState, page, 100), response =>
+        _merchantResultsContent.SetValue(BuildMerchantResults());
+        SearchMerchantArea(version, areas, 0, forceFullMap, new List<MerchantAreaResults>());
+    }
+
+    private void SearchMerchantArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        bool forceFullMap,
+        List<MerchantAreaResults> results)
+    {
+        FinderBackendClient.SearchMerchants(CreateMerchantRequest(areas[index]), response =>
         {
-            if (!Accept(version)) return;
-            if (append && _merchantResponse != null && response.Success)
-                response = response with { Rows = _merchantResponse.Rows.Concat(response.Rows).ToArray() };
-            _merchantResponse = response;
-            _merchantTable.SetItems(response.Rows);
-            SetStatus(response.Success ? $"找到 {response.TotalCount} 项 · {response.ElapsedMs} ms" : response.Message);
+            if (version != _merchantSearchVersion || _window?.IsShowing != true) return;
+            _merchantSearchCompleted++;
+            if (!response.Success)
+            {
+                if (index == 0)
+                {
+                    _merchantSearchInFlight = false;
+                    SetStatus(response.Message);
+                    _merchantResultsContent.SetValue(BuildMerchantResults());
+                    return;
+                }
+                SearchNextMerchantArea(version, areas, index, forceFullMap, results);
+                return;
+            }
+
+            if (response.TotalCount > 0)
+                results.Add(new MerchantAreaResults(areas[index], response));
+            if (index == 0 && !AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+                currentAreaHasResults: results.Count > 0, forceFullMap))
+            {
+                CompleteMerchantSearch(results);
+                return;
+            }
+            SearchNextMerchantArea(version, areas, index, forceFullMap, results);
+        });
+    }
+
+    private void SearchNextMerchantArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        bool forceFullMap,
+        List<MerchantAreaResults> results)
+    {
+        int next = index + 1;
+        if (next >= areas.Count)
+        {
+            CompleteMerchantSearch(results);
+            return;
+        }
+        SetStatus($"正在搜索全地图（{_merchantSearchCompleted}/{_merchantSearchTotal}）……");
+        SearchMerchantArea(version, areas, next, forceFullMap, results);
+    }
+
+    private void CompleteMerchantSearch(IReadOnlyList<MerchantAreaResults> results)
+    {
+        _merchantSearchInFlight = false;
+        _merchantSearchCacheValid = true;
+        _merchantAreaResults = AreaSearchPlan.OrderByResultCount(
+            results, area => area.Response.TotalCount, area => area.AreaId);
+        _merchantAreaTabs.Replace(_merchantAreaResults.Take(1).Select(area => area.AreaId), notify: false);
+        ClearStatus();
+        _merchantResultsContent.SetValue(BuildMerchantResults());
+    }
+
+    private void LoadMoreMerchants()
+    {
+        MerchantAreaResults? area = SelectedMerchantAreaResults;
+        if (area == null || !area.Response.Success || area.Response.Rows.Count >= area.Response.TotalCount)
+            return;
+        int version = ++_merchantSearchVersion;
+        SetStatus("正在加载更多商会目标……");
+        FinderBackendClient.SearchMerchants(CreateMerchantRequest(area.AreaId, area.Response.Page + 1), response =>
+        {
+            if (version != _merchantSearchVersion || _window?.IsShowing != true || !response.Success) return;
+            area.Response = response with { Rows = area.Response.Rows.Concat(response.Rows).ToArray() };
+            ClearStatus();
             _merchantResultsContent.SetValue(BuildMerchantResults());
         });
     }
 
-    private void SearchRenxia()
+    private void SearchRenxia() => SearchRenxia(forceFullMap: false);
+
+    private void SearchRenxia(bool forceFullMap)
     {
-        if (_selectedAreaId < 0) return;
+        if (_catalog == null || !HasRenxiaFilter) return;
         if (!SupportsRenxiaSearch)
         {
             SetStatus("任侠查找需要重启游戏后才能使用。新版后端尚未载入。");
             RefreshActivePage();
             return;
         }
-        int gradeMask = _renxiaGrades.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
+        IReadOnlyList<short> areas = AreaSearchPlan.BuildSearchOrder(
+            _catalog.Areas.Select(area => area.AreaId), _catalog.CurrentAreaId);
+        if (areas.Count == 0) return;
+
+        int version = ++_renxiaSearchVersion;
+        _renxiaSearchCacheValid = false;
+        _renxiaSearchInFlight = true;
+        _renxiaSearchCompleted = 0;
+        _renxiaSearchTotal = areas.Count;
+        _renxiaAreaResults = Array.Empty<RenxiaAreaResults>();
+        _renxiaAreaTabs.Replace(Array.Empty<short>(), notify: false);
         SetStatus("正在查询任侠……");
-        int version = ++_requestVersion;
-        FinderBackendClient.SearchRenxia(new RenxiaSearchRequestView(_selectedAreaId, gradeMask), response =>
+        _renxiaResultsContent.SetValue(BuildRenxiaResults());
+        int gradeMask = _renxiaGrades.Selected.Aggregate(0, (mask, value) => mask | (1 << value));
+        SearchRenxiaArea(version, areas, 0, gradeMask, forceFullMap, new List<RenxiaAreaResults>());
+    }
+
+    private void SearchRenxiaArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        int gradeMask,
+        bool forceFullMap,
+        List<RenxiaAreaResults> results)
+    {
+        FinderBackendClient.SearchRenxia(new RenxiaSearchRequestView(areas[index], gradeMask), response =>
         {
-            if (!Accept(version)) return;
-            _renxiaResponse = response;
-            _renxiaTable.SetItems(response.Rows);
-            SetStatus(response.Success ? $"找到 {response.TotalCount} 个任侠 · {response.ElapsedMs} ms" : response.Message);
-            _renxiaResultsContent.SetValue(BuildRenxiaResults());
+            if (version != _renxiaSearchVersion || _window?.IsShowing != true) return;
+            _renxiaSearchCompleted++;
+            if (!response.Success)
+            {
+                if (index == 0)
+                {
+                    _renxiaSearchInFlight = false;
+                    SetStatus(response.Message);
+                    _renxiaResultsContent.SetValue(BuildRenxiaResults());
+                    return;
+                }
+                SearchNextRenxiaArea(version, areas, index, gradeMask, forceFullMap, results);
+                return;
+            }
+
+            if (response.TotalCount > 0)
+                results.Add(new RenxiaAreaResults(areas[index], response));
+            if (index == 0 && !AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+                currentAreaHasResults: results.Count > 0, forceFullMap))
+            {
+                CompleteRenxiaSearch(results);
+                return;
+            }
+            SearchNextRenxiaArea(version, areas, index, gradeMask, forceFullMap, results);
         });
+    }
+
+    private void SearchNextRenxiaArea(
+        int version,
+        IReadOnlyList<short> areas,
+        int index,
+        int gradeMask,
+        bool forceFullMap,
+        List<RenxiaAreaResults> results)
+    {
+        int next = index + 1;
+        if (next >= areas.Count)
+        {
+            CompleteRenxiaSearch(results);
+            return;
+        }
+        SetStatus($"正在搜索全地图（{_renxiaSearchCompleted}/{_renxiaSearchTotal}）……");
+        SearchRenxiaArea(version, areas, next, gradeMask, forceFullMap, results);
+    }
+
+    private void CompleteRenxiaSearch(IReadOnlyList<RenxiaAreaResults> results)
+    {
+        _renxiaSearchInFlight = false;
+        _renxiaSearchCacheValid = true;
+        _renxiaAreaResults = AreaSearchPlan.OrderByResultCount(
+            results, area => area.Response.TotalCount, area => area.AreaId);
+        _renxiaAreaTabs.Replace(_renxiaAreaResults.Take(1).Select(area => area.AreaId), notify: false);
+        ClearStatus();
+        _renxiaResultsContent.SetValue(BuildRenxiaResults());
     }
 
     private void ResetCombat()
@@ -1606,8 +2167,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private void ResetLife()
     {
         _lifeType = -1; _lifeSkill = -1;
-        for (int i = 0; i < 5; i++) _lifeStates[i] = 0;
-        _lifeHoldings = null; _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty; RefreshActivePage();
+        ClearLifeResults();
+        RefreshActivePage();
     }
 
     private void ResetPeople()
@@ -1618,13 +2179,15 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             filter.Enabled.SetValueWithoutNotify(false); filter.LifeSkillType = 0; filter.Metric = 0;
             filter.Minimum.SetValueWithoutNotify(80);
         }
-        _personResponse = null; _personTable.SetItems(Array.Empty<PersonRowView>()); RefreshActivePage();
+        ClearPersonResults();
+        RefreshActivePage();
     }
 
     private void ResetRenxia()
     {
         _renxiaGrades.Clear();
-        _renxiaResponse = null; _renxiaTable.SetItems(Array.Empty<RenxiaRowView>()); RefreshActivePage();
+        ClearRenxiaResults();
+        RefreshActivePage();
     }
 
     private void SelectArea(short areaId, bool markStale = true, bool refresh = true)
@@ -1649,12 +2212,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         _requestVersion++;
         if (invalidateCombat) ClearCombatResults();
-        _lifeHoldings = null; _personResponse = null; _merchantResponse = null;
-        _renxiaResponse = null;
-        _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
-        _personTable.SetItems(Array.Empty<PersonRowView>());
-        _merchantTable.SetItems(Array.Empty<MerchantRowView>());
-        _renxiaTable.SetItems(Array.Empty<RenxiaRowView>());
+        ClearLifeResults();
+        ClearPersonResults();
+        ClearMerchantResults();
+        ClearRenxiaResults();
         ClearStatus();
     }
 
@@ -1666,9 +2227,65 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         }
         else
         {
-            _lifeHoldings = null;
-            _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+            ClearLifeResults();
         }
+    }
+
+    private void ClearLifeResults()
+    {
+        _lifeHoldingsVersion++;
+        _lifeSearchCacheValid = false;
+        _lifeSearchInFlight = false;
+        _lifeSearchCompleted = 0;
+        _lifeSearchTotal = 0;
+        _lifeAreaHoldings = Array.Empty<LifeAreaHoldings>();
+        _lifeAreaTabs.Replace(Array.Empty<short>(), notify: false);
+        _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+    }
+
+    private void ClearPersonResults()
+    {
+        _personSearchVersion++;
+        _personSearchCacheValid = false;
+        _personSearchInFlight = false;
+        _personSearchCompleted = 0;
+        _personSearchTotal = 0;
+        _personAreaResults = Array.Empty<PersonAreaResults>();
+        _personAreaTabs.Replace(Array.Empty<short>(), notify: false);
+        _personTable.SetItems(Array.Empty<PersonRowView>());
+    }
+
+    private void ClearMerchantResults()
+    {
+        _merchantSearchVersion++;
+        _merchantSearchCacheValid = false;
+        _merchantSearchInFlight = false;
+        _merchantSearchCompleted = 0;
+        _merchantSearchTotal = 0;
+        _merchantAreaResults = Array.Empty<MerchantAreaResults>();
+        _merchantAreaTabs.Replace(Array.Empty<short>(), notify: false);
+        _merchantTable.SetItems(Array.Empty<MerchantRowView>());
+    }
+
+    private void ClearRenxiaResults()
+    {
+        _renxiaSearchVersion++;
+        _renxiaSearchCacheValid = false;
+        _renxiaSearchInFlight = false;
+        _renxiaSearchCompleted = 0;
+        _renxiaSearchTotal = 0;
+        _renxiaAreaResults = Array.Empty<RenxiaAreaResults>();
+        _renxiaAreaTabs.Replace(Array.Empty<short>(), notify: false);
+        _renxiaTable.SetItems(Array.Empty<RenxiaRowView>());
+    }
+
+    private void CancelInFlightSearches()
+    {
+        if (_combatSearchInFlight) ClearCombatResults();
+        if (_lifeSearchInFlight) ClearLifeResults();
+        if (_personSearchInFlight) ClearPersonResults();
+        if (_merchantSearchInFlight) ClearMerchantResults();
+        if (_renxiaSearchInFlight) ClearRenxiaResults();
     }
 
     private void ClearCombatResults()
@@ -1679,7 +2296,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _combatSearchCompleted = 0;
         _combatSearchTotal = 0;
         _combatAreaHoldings = Array.Empty<CombatAreaHoldings>();
-        _combatAreaTabs.Clear();
+        _combatAreaTabs.Replace(Array.Empty<short>(), notify: false);
         _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     }
 
@@ -1693,10 +2310,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private UiElement BuildActiveTabPage() => _activeTab switch
     {
         0 => BuildTabPage(BuildCombatPage(), "combat", showRegionSelector: false),
-        1 => BuildTabPage(BuildLifePage(), "life"),
-        2 => BuildTabPage(BuildPersonPage(), "person"),
-        3 => BuildTabPage(BuildMerchantPage(), "merchant"),
-        4 => BuildTabPage(BuildRenxiaPage(), "renxia"),
+        1 => BuildTabPage(BuildLifePage(), "life", showRegionSelector: false),
+        2 => BuildTabPage(BuildPersonPage(), "person", showRegionSelector: false),
+        3 => BuildTabPage(BuildMerchantPage(), "merchant", showRegionSelector: false),
+        4 => BuildTabPage(BuildRenxiaPage(), "renxia", showRegionSelector: false),
         _ => Ui.Spacer(),
     };
 

@@ -1,7 +1,7 @@
 namespace MapSkillFinder.Frontend;
 
-/// <summary>Pure ordering rules for the combat-book local-first search.</summary>
-internal static class CombatAreaSearchPlan
+/// <summary>Pure ordering and cache rules for local-first map searches.</summary>
+internal static class AreaSearchPlan
 {
     internal static IReadOnlyList<short> BuildSearchOrder(
         IEnumerable<short> areaIds,
@@ -20,7 +20,11 @@ internal static class CombatAreaSearchPlan
         results.OrderByDescending(resultCount).ThenBy(areaId).ToArray();
 
     internal static bool ShouldStartAfterCatalog(
-        bool hasSelectedBook,
+        bool hasSearchCriteria,
         bool cacheValid,
-        bool searchInFlight) => hasSelectedBook && !cacheValid && !searchInFlight;
+        bool searchInFlight) => hasSearchCriteria && !cacheValid && !searchInFlight;
+
+    internal static bool ShouldSearchBeyondCurrentArea(
+        bool currentAreaHasResults,
+        bool forceFullMap) => forceFullMap || !currentAreaHasResults;
 }

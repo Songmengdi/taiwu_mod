@@ -75,30 +75,39 @@ Equal(2, multipleCopies.Combinations[0].BookCount, "both required copies are sel
 
 Console.WriteLine("MapSkillFinder domain contracts passed.");
 
-// ---- Combat area search: local first, fallback results ordered by count ----
+// ---- Area search: local first, fallback results ordered by count ----
 
-SequenceEqual(new short[] { 5, 1, 3 }, CombatAreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 5 }, 5),
+SequenceEqual(new short[] { 5, 1, 3 }, AreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 5 }, 5),
     "current area is searched before every other area");
-SequenceEqual(new short[] { 1, 3 }, CombatAreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 1 }, 5),
+SequenceEqual(new short[] { 1, 3 }, AreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 1 }, 5),
     "missing current area does not invent an invalid query");
-var orderedAreas = CombatAreaSearchPlan.OrderByResultCount(
+var orderedAreas = AreaSearchPlan.OrderByResultCount(
     new[] { (AreaId: (short)3, Count: 2), (AreaId: (short)1, Count: 5), (AreaId: (short)2, Count: 5) },
     item => item.Count, item => item.AreaId);
 SequenceEqual(new short[] { 1, 2, 3 }, orderedAreas.Select(item => item.AreaId),
     "region sheets sort by result count then stable area id");
-Equal(false, CombatAreaSearchPlan.ShouldStartAfterCatalog(
-    hasSelectedBook: true, cacheValid: true, searchInFlight: false),
-    "same-month combat result cache suppresses reopen search");
-Equal(true, CombatAreaSearchPlan.ShouldStartAfterCatalog(
-    hasSelectedBook: true, cacheValid: false, searchInFlight: false),
-    "invalidated combat cache searches after reopen");
-Equal(false, CombatAreaSearchPlan.ShouldStartAfterCatalog(
-    hasSelectedBook: true, cacheValid: false, searchInFlight: true),
-    "in-flight combat search is never duplicated");
-Equal(false, CombatAreaSearchPlan.ShouldStartAfterCatalog(
-    hasSelectedBook: false, cacheValid: false, searchInFlight: false),
-    "missing combat-book selection does not search");
-Console.WriteLine("Combat area search contracts passed.");
+Equal(false, AreaSearchPlan.ShouldStartAfterCatalog(
+    hasSearchCriteria: true, cacheValid: true, searchInFlight: false),
+    "same-month result cache suppresses reopen search");
+Equal(true, AreaSearchPlan.ShouldStartAfterCatalog(
+    hasSearchCriteria: true, cacheValid: false, searchInFlight: false),
+    "invalidated result cache searches after reopen");
+Equal(false, AreaSearchPlan.ShouldStartAfterCatalog(
+    hasSearchCriteria: true, cacheValid: false, searchInFlight: true),
+    "in-flight map search is never duplicated");
+Equal(false, AreaSearchPlan.ShouldStartAfterCatalog(
+    hasSearchCriteria: false, cacheValid: false, searchInFlight: false),
+    "missing search criteria does not search");
+Equal(false, AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+    currentAreaHasResults: true, forceFullMap: false),
+    "a local hit keeps the default search local");
+Equal(true, AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+    currentAreaHasResults: true, forceFullMap: true),
+    "manual full-map search continues after a local hit");
+Equal(true, AreaSearchPlan.ShouldSearchBeyondCurrentArea(
+    currentAreaHasResults: false, forceFullMap: false),
+    "a local miss falls back to the full map");
+Console.WriteLine("Area search contracts passed.");
 
 // ---- TaiwuPageMarking: per-page 已拥有/已读 coverage marks ----
 

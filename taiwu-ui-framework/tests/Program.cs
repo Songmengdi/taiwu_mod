@@ -10,6 +10,8 @@ var filterSelection = new TaiwuSelection<string>(
     TaiwuSelectionMode.Multiple, new[] { "plain" });
 var selectButtons = new TaiwuSelection<string>(
     TaiwuSelectionMode.Single, new[] { "here" });
+var sheetTabs = new TaiwuSelection<string>(
+    TaiwuSelectionMode.Single, new[] { "here" });
 var popupSelection = new TaiwuSelection<string>(
     TaiwuSelectionMode.Single, new[] { "sect" });
 var popupCard = new TaiwuPopupCardModel(
@@ -89,6 +91,11 @@ UiElement content = Ui.Column(
         new TaiwuChoiceOption<string>("here", "本地"),
         new TaiwuChoiceOption<string>("other", "其他"),
     }, compact: true) with { Key = "select-buttons" },
+    Ui.SheetTabs(sheetTabs, new[]
+    {
+        new TaiwuChoiceOption<string>("here", "嵩山 76"),
+        new TaiwuChoiceOption<string>("other", "然山 12"),
+    }) with { Key = "sheet-tabs" },
     Ui.PopupSelect("地域", popupSelection, new[]
     {
         new TaiwuChoiceOption<string>("sect", "门派地域"),
@@ -119,7 +126,7 @@ UiValidationResult validation = TaiwuUiApi.Validate(window);
 Expect(validation.IsValid, true, "declarative window validates");
 Expect(validation.Errors.Count, 0, "declarative window errors");
 Expect(window.Key, "contract:declarative", "stable window key");
-Expect(((UiColumnElement)window.Content).Children.Count, 12, "public element tree");
+Expect(((UiColumnElement)window.Content).Children.Count, 13, "public element tree");
 Expect(bottomSelection.IsSelected("all"), false, "validation has no state side effects");
 
 var responsive = new UiWindow("contract", "responsive", Ui.Row(
@@ -163,6 +170,8 @@ filterSelection.Toggle("good");
 Expect(filterSelection.IsSelected("good"), true, "controlled multiple selection");
 tabSelection.Select("home");
 Expect(tabSelection.IsSelected("home"), true, "controlled tab selection");
+sheetTabs.Select("other");
+Expect(sheetTabs.IsSelected("other"), true, "controlled sheet-tab selection");
 
 ExpectThrows<ArgumentException>(() => new TaiwuTabsModel<string>(
     new TaiwuSelection<string>(TaiwuSelectionMode.Multiple)),

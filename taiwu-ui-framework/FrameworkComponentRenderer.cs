@@ -719,9 +719,10 @@ internal static class FilterFamilyModule
 {
     internal static void RenderChoices(Transform parent, ChoiceGroupNode node, TaiwuTheme theme)
     {
+        bool sheetTab = node.Appearance == ChoiceGroupAppearance.SheetTab;
         RectTransform root = UiFactory.Rect("ChoiceGroup", parent);
         var vertical = root.gameObject.AddComponent<VerticalLayoutGroup>();
-        vertical.spacing = node.Compact ? 4f : 6f;
+        vertical.spacing = sheetTab ? 6f : node.Compact ? 4f : 6f;
         vertical.childAlignment = TextAnchor.UpperLeft;
         vertical.childControlWidth = true;
         vertical.childControlHeight = true;
@@ -743,8 +744,8 @@ internal static class FilterFamilyModule
 
         RectTransform flowRoot = UiFactory.Rect("Options", root);
         var flow = flowRoot.gameObject.AddComponent<TaiwuFlowLayout>();
-        flow.Spacing = new Vector2(node.Compact ? 3f : 0f, 4f);
-        flow.ItemHeight = node.Compact ? 40f : 52f;
+        flow.Spacing = new Vector2(sheetTab ? 8f : node.Compact ? 3f : 0f, sheetTab ? 6f : 4f);
+        flow.ItemHeight = sheetTab ? 44f : node.Compact ? 40f : 52f;
         flow.padding = new RectOffset(0, 0, 0, 0);
         // TaiwuFlowLayout reports the correct height after measuring all wrapped options.
         UiFactory.Layout(flowRoot, -1f, -1f, flexibleWidth: 1f);
@@ -759,7 +760,21 @@ internal static class FilterFamilyModule
                 node.Compact ? 68f : 114f,
                 initial.Items[index].Label.Length * 24f + (node.Compact ? 20f : 42f));
             UiFactory.Layout(option, width, flow.ItemHeight, flexibleWidth: 0f);
-            CImage image = option.gameObject.AddComponent<CImage>();
+            CImage image;
+            if (sheetTab)
+            {
+                RectTransform frame = UiFactory.Rect("Frame", option);
+                UiFactory.Stretch(frame, Vector2.zero, Vector2.zero);
+                theme.ApplySheetTabFrame(frame.gameObject.AddComponent<CImage>());
+
+                RectTransform face = UiFactory.Rect("Face", option);
+                UiFactory.Stretch(face, new Vector2(3f, 3f), new Vector2(-3f, -3f));
+                image = face.gameObject.AddComponent<CImage>();
+            }
+            else
+            {
+                image = option.gameObject.AddComponent<CImage>();
+            }
             CButton button = option.gameObject.AddComponent<CButton>();
             button.targetGraphic = image;
             if (initial.Items[index].Highlighted)
@@ -800,6 +815,7 @@ internal static class FilterFamilyModule
                     buttons[index].Button,
                     snapshot.Items[index].Selected,
                     snapshot.Items[index].Interactable,
+                    node.Appearance,
                     theme);
         }
 
@@ -1087,9 +1103,13 @@ internal static class FilterFamilyModule
         CButton button,
         bool selected,
         bool interactable,
+        ChoiceGroupAppearance appearance,
         TaiwuTheme theme)
     {
-        theme.ApplyFilterChoice(image, button, selected);
+        if (appearance == ChoiceGroupAppearance.SheetTab)
+            theme.ApplySheetTabChoice(image, button, selected);
+        else
+            theme.ApplyFilterChoice(image, button, selected);
         button.interactable = interactable;
         image.color = interactable ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.8f);
     }

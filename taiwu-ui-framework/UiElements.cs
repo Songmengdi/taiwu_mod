@@ -146,6 +146,25 @@ public sealed record UiSelectButtonsElement<T>(
     }
 }
 
+/// <summary>
+/// A compact, exclusive sheet selector with individually framed buttons.
+/// Use it for a local content scope such as regions; it is intentionally less
+/// prominent than primary navigation tabs.
+/// </summary>
+public sealed record UiSheetTabsElement<T>(
+    TaiwuSelection<T> Selection,
+    IReadOnlyList<TaiwuChoiceOption<T>> Items) : UiElement
+{
+    internal override UiNode Compile()
+    {
+        if (Selection.Mode != TaiwuSelectionMode.Single)
+            throw new ArgumentException("Sheet tabs require single selection.", nameof(Selection));
+        return new ChoiceGroupNode(string.Empty,
+            ElementStateProjection.Choices(Selection, Items), compact: true, selectOnly: true,
+            appearance: ChoiceGroupAppearance.SheetTab);
+    }
+}
+
 /// <summary>A single-selection button that opens a native-styled floating choice panel.</summary>
 public sealed record UiPopupSelectElement<T>(
     string Label,
@@ -368,6 +387,8 @@ public static class Ui
     public static UiSelectButtonsElement<T> SelectButtons<T>(
         TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
         bool compact = false) => new(selection, items, compact);
+    public static UiSheetTabsElement<T> SheetTabs<T>(
+        TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items) => new(selection, items);
     public static UiPopupSelectElement<T> PopupSelect<T>(
         string label, TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
         TaiwuPopupSelectOptions? options = null) =>

@@ -411,13 +411,24 @@ internal sealed class RangeSliderNode(
     internal float Step { get; } = step;
 }
 
+internal enum ChoiceGroupAppearance
+{
+    Filter,
+    SheetTab,
+}
+
 internal sealed class ChoiceGroupNode(
-    string label, ElementStateProjection projection, bool compact, bool selectOnly = false) : UiNode
+    string label,
+    ElementStateProjection projection,
+    bool compact,
+    bool selectOnly = false,
+    ChoiceGroupAppearance appearance = ChoiceGroupAppearance.Filter) : UiNode
 {
     internal string Label { get; } = label;
     internal ElementStateProjection Projection { get; } = projection;
     internal bool Compact { get; } = compact;
     internal bool SelectOnly { get; } = selectOnly;
+    internal ChoiceGroupAppearance Appearance { get; } = appearance;
 }
 
 internal sealed class PopupSelectNode(

@@ -106,6 +106,18 @@ internal static class FinderModMethods
             response.Set("HolderCount", result.Holders.Count);
             for (int i = 0; i < result.Holders.Count; i++)
                 WriteHolder(response, $"H{i}_", result.Holders[i]);
+            response.Set("TaiwuReadingState", result.TaiwuReadingState);
+            response.Set("TaiwuBookCount", result.TaiwuBooks.Count);
+            for (int i = 0; i < result.TaiwuBooks.Count; i++)
+            {
+                BookCopyCandidate book = result.TaiwuBooks[i];
+                string bookPrefix = $"TB{i}";
+                response.Set(bookPrefix + "Id", book.CopyId);
+                response.Set(bookPrefix + "Source", (int)book.Source);
+                response.Set(bookPrefix + "PageTypes", (int)book.PageTypes);
+                response.Set(bookPrefix + "PageStates", (int)book.PageStates);
+                response.Set(bookPrefix + "Coverage", checked((int)book.CoverageMask));
+            }
         });
 
     private static void WriteCombination(

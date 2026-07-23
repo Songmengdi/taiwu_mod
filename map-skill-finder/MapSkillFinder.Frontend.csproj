@@ -22,6 +22,7 @@
     <Compile Include="FrontendPlugin.cs" />
     <Compile Include="IsExternalInit.cs" />
     <Compile Include="FinderBackendClient.cs" />
+    <Compile Include="TaiwuPageMarking.cs" />
     <Compile Include="BookHoldingWorkspace.cs" />
     <Compile Include="FindMapBlockPatch.cs" />
     <Compile Include="MapMarkTracker.cs" />

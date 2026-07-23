@@ -1,3 +1,4 @@
+using GameData.Domains.CombatSkill;
 using GameData.Domains.Item;
 
 namespace MapSkillFinder.Frontend;
@@ -114,6 +115,59 @@ internal static class BookHoldingWorkspace
                 coverage |= 1UL << page;
         }
         return coverage;
+    }
+
+    // 已读书页：功法 readingState 是 CombatSkill.GetReadingState() 原值，按游戏内部页序解码
+    // （总纲 behaviorType 0..4，正文 pageId 1..5 + 正/逆方向，均经运行核实）；
+    // 技艺 readingState 是后端按页 0..4 拼好的位掩码。<0 表示太吾尚未习得。
+    internal static TaiwuBookKnowledge BuildTaiwuKnowledge(
+        IReadOnlyList<BookCopyView> taiwuBooks,
+        int readingState,
+        bool combat)
+    {
+        int pageCount = PageCount(combat);
+        var owned = new int[pageCount];
+        var read = new int[pageCount];
+        foreach (BookCopyView book in taiwuBooks)
+        {
+            for (int page = 0; page < pageCount; page++)
+            {
+                PageTargetChoice target = ReadTarget(book, page, combat);
+                if (target.State != 0) continue;
+                owned[page] |= TaiwuPageMarking.VariantBit(combat, target.Type);
+            }
+        }
+        if (readingState >= 0)
+        {
+            if (combat)
+            {
+                ushort state = (ushort)readingState;
+                for (sbyte outline = 0; outline < 5; outline++)
+                {
+                    if (CombatSkillStateHelper.IsPageRead(state,
+                            CombatSkillStateHelper.GetOutlinePageInternalIndex(outline)))
+                        read[0] |= 1 << outline;
+                }
+                for (byte page = 1; page < pageCount; page++)
+                {
+                    for (sbyte direction = 0; direction < 2; direction++)
+                    {
+                        if (CombatSkillStateHelper.IsPageRead(state,
+                                CombatSkillStateHelper.GetNormalPageInternalIndex(direction, page)))
+                            read[page] |= 1 << direction;
+                    }
+                }
+            }
+            else
+            {
+                for (int page = 0; page < pageCount; page++)
+                {
+                    if ((readingState & (1 << page)) != 0)
+                        read[page] = 1;
+                }
+            }
+        }
+        return new TaiwuBookKnowledge(combat, owned, read);
     }
 
     private static PageTargetChoice ReadTarget(BookCopyView book, int page, bool combat)

@@ -62,7 +62,9 @@ internal sealed record BookHoldingsRequest(
 internal sealed record BookHoldingsResult(
     string BookName,
     long ElapsedMilliseconds,
-    IReadOnlyList<BookHolderCandidate> Holders);
+    IReadOnlyList<BookHolderCandidate> Holders,
+    IReadOnlyList<BookCopyCandidate> TaiwuBooks,
+    int TaiwuReadingState);
 
 internal sealed record BookSearchResult(
     string BookName,
@@ -307,7 +309,64 @@ internal static class MapSkillFinderService
                 organizationConfig?.Name ?? "无所属", organization.Grade, books));
         }
         stopwatch.Stop();
-        return new BookHoldingsResult(bookName, stopwatch.ElapsedMilliseconds, holders);
+        IReadOnlyList<BookCopyCandidate> taiwuBooks =
+            GetTaiwuOwnedBooks(bookId, anyPages).ToList();
+        int taiwuReadingState = GetTaiwuReadingState(request.Kind, request.SkillTemplateId, pageCount);
+        return new BookHoldingsResult(bookName, stopwatch.ElapsedMilliseconds, holders,
+            taiwuBooks, taiwuReadingState);
+    }
+
+    // 太吾背包与仓库中该书的全部拷贝，用于前端标记"已拥有"书页。
+    private static IEnumerable<BookCopyCandidate> GetTaiwuOwnedBooks(
+        short bookId,
+        IReadOnlyList<PageRequirement> requirements)
+    {
+        foreach (KeyValuePair<ItemKey, int> pair in DomainManager.Taiwu.TroughItems)
+        {
+            ItemKey key = pair.Key;
+            if (key.ItemType != 10 || key.TemplateId != bookId || key.GetData() is not TaiwuSkillBook book)
+                continue;
+            ulong coverage = Coverage(book.GetPageTypes(), book.GetPageIncompleteState(), requirements);
+            yield return new BookCopyCandidate($"T:{key.Id}",
+                BookSource.Inventory, book.GetPageTypes(), book.GetPageIncompleteState(), coverage);
+        }
+        foreach (KeyValuePair<ItemKey, int> pair in DomainManager.Taiwu.WarehouseItems)
+        {
+            ItemKey key = pair.Key;
+            if (key.ItemType != 10 || key.TemplateId != bookId || key.GetData() is not TaiwuSkillBook book)
+                continue;
+            ulong coverage = Coverage(book.GetPageTypes(), book.GetPageIncompleteState(), requirements);
+            yield return new BookCopyCandidate($"W:{key.Id}",
+                BookSource.Inventory, book.GetPageTypes(), book.GetPageIncompleteState(), coverage);
+        }
+    }
+
+    // 太吾已读书页：功法返回 CombatSkill.GetReadingState() 原值（前端用 CombatSkillStateHelper 解码）；
+    // 技艺显式拼 0..4 页位掩码（避免前端猜测 pageId 基准）。-1 表示尚未习得。
+    private static int GetTaiwuReadingState(SearchBookKind kind, short skillTemplateId, int pageCount)
+    {
+        int taiwuId = DomainManager.Taiwu.GetTaiwuCharId();
+        if (kind == SearchBookKind.Combat)
+        {
+            return DomainManager.CombatSkill.GetCharCombatSkills(taiwuId)
+                .TryGetValue(skillTemplateId, out GameData.Domains.CombatSkill.CombatSkill? skill) && skill != null
+                ? skill.GetReadingState()
+                : -1;
+        }
+        foreach (GameData.Domains.Character.LifeSkillItem learned in
+                 DomainManager.Taiwu.GetTaiwu().GetLearnedLifeSkills())
+        {
+            if (learned.SkillTemplateId != skillTemplateId)
+                continue;
+            int mask = 0;
+            for (byte page = 0; page < pageCount; page++)
+            {
+                if (learned.IsPageRead(page))
+                    mask |= 1 << page;
+            }
+            return mask;
+        }
+        return -1;
     }
 
     internal static PersonSearchResult SearchPeople(PersonSearchRequest request)

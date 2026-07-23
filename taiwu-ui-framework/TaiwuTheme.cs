@@ -456,6 +456,15 @@ internal sealed class TaiwuTheme
         image.raycastTarget = false;
     }
 
+    /// <summary>Translucent green plate marking a choice as already available.</summary>
+    internal void ApplyChoiceHighlight(CImage image)
+    {
+        image.sprite = null;
+        image.type = Image.Type.Simple;
+        image.color = new Color(0.30f, 0.72f, 0.42f, 0.45f);
+        image.raycastTarget = false;
+    }
+
     /// <summary>
     /// Applies the native inline-filter chrome used by the game's compact options
     /// (for example, the “门派” button in the map-block filter). Unlike a toggle,

@@ -7,7 +7,8 @@ internal sealed record ChoiceItemSnapshot(
     string Label,
     bool Selected,
     bool Interactable,
-    TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral);
+    TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral,
+    bool Highlighted = false);
 internal sealed record ChoiceSnapshot(IReadOnlyList<ChoiceItemSnapshot> Items) : ElementSnapshot;
 internal sealed record ToggleChoiceIntent(int Index) : ElementIntent;
 internal sealed record SelectChoiceIntent(int Index) : ElementIntent;
@@ -89,7 +90,8 @@ internal sealed class ElementStateProjection : IDisposable
                 option.Label,
                 selection.IsSelected(option.Value),
                 selection.Interactable && option.Interactable,
-                option.Tone)).ToArray()),
+                option.Tone,
+                option.Highlighted)).ToArray()),
             intent =>
             {
                 int index = intent switch

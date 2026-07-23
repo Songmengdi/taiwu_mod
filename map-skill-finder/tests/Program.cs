@@ -1,4 +1,5 @@
 using MapSkillFinder.Domain;
+using MapSkillFinder.Frontend;
 
 static BookCopyCandidate Book(string id, BookSource source, params int[] pages)
 {
@@ -67,3 +68,57 @@ Equal(1, multipleCopies.HolderCount, "multiple copies owned by one holder remain
 Equal(2, multipleCopies.Combinations[0].BookCount, "both required copies are selected");
 
 Console.WriteLine("MapSkillFinder domain contracts passed.");
+
+// ---- TaiwuPageMarking: per-page 已拥有/已读 coverage marks ----
+
+// Combat knowledge: page 0 read outline type 2; page 1 owns 完整正页(bit0) and
+// read 逆页(bit1) → both directions covered; page 2 owns 完整逆页 only.
+var combat = new TaiwuBookKnowledge(Combat: true,
+    OwnedTypeMasks: new[] { 0, 0b01, 0b10, 0, 0, 0 },
+    ReadTypeMasks: new[] { 0b100, 0b10, 0, 0, 0, 0 });
+Equal(true, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 0, new PageTargetChoice(2, 0)),
+    "read outline page is covered");
+Equal(false, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 0, new PageTargetChoice(3, 0)),
+    "other outline types are not covered");
+Equal(true, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 1, new PageTargetChoice(0, 0)),
+    "owned complete 正 page is covered");
+Equal(true, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 1, new PageTargetChoice(1, 0)),
+    "read 逆 page is covered");
+Equal(true, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 1, new PageTargetChoice(0, 1)),
+    "coverage ignores the option's page state as long as it is concrete");
+Equal(false, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 1, new PageTargetChoice(-1, -1)),
+    "wildcard target is never covered");
+Equal(false, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 3, new PageTargetChoice(0, 0)),
+    "unknown page is not covered");
+Equal(false, TaiwuPageMarking.IsVariantCoveredByTaiwu(combat, 9, new PageTargetChoice(0, 0)),
+    "out-of-range page is tolerated");
+Equal(true, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(combat, 1),
+    "combat page with both directions covered is fully covered");
+Equal(false, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(combat, 2),
+    "combat page with only one direction covered is not fully covered");
+Equal(true, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(combat, 0),
+    "outline page counts as fully covered once any outline type is covered");
+Equal(false, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(combat, 4),
+    "untouched page is not fully covered");
+Equal(true, TaiwuPageMarking.HasAnyMark(combat), "knowledge with marks reports any");
+
+// Life knowledge: page index 1 owned, page index 3 read; type is ignored.
+var life = new TaiwuBookKnowledge(Combat: false,
+    OwnedTypeMasks: new[] { 0, 1, 0, 0, 0 },
+    ReadTypeMasks: new[] { 0, 0, 0, 1, 0 });
+Equal(true, TaiwuPageMarking.IsVariantCoveredByTaiwu(life, 1, new PageTargetChoice(-1, 0)),
+    "life page coverage ignores type");
+Equal(true, TaiwuPageMarking.IsVariantCoveredByTaiwu(life, 3, new PageTargetChoice(-1, 1)),
+    "life read page is covered");
+Equal(true, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(life, 1),
+    "life page is fully covered once owned or read");
+Equal(false, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(life, 0),
+    "life untouched page is not fully covered");
+
+var empty = TaiwuBookKnowledge.Empty;
+Equal(false, TaiwuPageMarking.IsVariantCoveredByTaiwu(empty, 0, new PageTargetChoice(0, 0)),
+    "empty knowledge covers nothing");
+Equal(false, TaiwuPageMarking.IsPageFullyCoveredByTaiwu(empty, 0), "empty knowledge fully covers nothing");
+Equal(false, TaiwuPageMarking.HasAnyMark(empty), "empty knowledge has no marks");
+
+Console.WriteLine("TaiwuPageMarking contracts passed.");

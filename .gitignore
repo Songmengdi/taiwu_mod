@@ -5,6 +5,8 @@
 .kimi-code/
 .venv-cover/
 .artifacts/
+.dotnet/
+dotnet-install.ps1
 
 # 构建产物
 [Bb]in/

@@ -9,8 +9,6 @@ using UnityEngine;
 
 namespace MapSkillFinder.Frontend;
 
-internal readonly record struct PageTargetChoice(sbyte Type, sbyte State);
-
 internal sealed class SkillFinderWindow : MonoBehaviour
 {
     private const string OwnerId = "MapSkillFinder";
@@ -81,6 +79,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private BookHoldingsResponse? _combatHoldings;
     private BookHoldingsResponse? _lifeHoldings;
+    private TaiwuBookKnowledge _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+    private TaiwuBookKnowledge _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     // Holder sets mount in pages of this size to bound the live UI object count.
     private const int HolderSetRenderPageSize = 30;
     private int _holderSetRenderLimit = HolderSetRenderPageSize;
@@ -578,6 +578,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             Ui.Muted($"{holders.Count} 人持有此书。点击实际存在的书页状态；默认优先选择持有人最多的完整状态。"),
         };
+        if (TaiwuPageMarking.HasAnyMark(_combatTaiwuKnowledge))
+            left.Add(Ui.Muted("绿色背景 = 太吾已有或已读的书页，无需再寻。"));
         for (int page = 0; page < BookHoldingWorkspace.CombatPageCount; page++)
             left.Add(BuildCombatHoldingPagePicker(holders, page));
 
@@ -607,6 +609,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         };
         for (int page = 0; page < BookHoldingWorkspace.LifePageCount; page++)
             left.Add(BuildLifeHoldingPagePicker(holders, page));
+        if (TaiwuPageMarking.HasAnyMark(_lifeTaiwuKnowledge))
+            left.Add(Ui.Muted("绿色背景 = 太吾已有或已读的书页，无需再寻。"));
 
         return BuildHoldingWorkspace(
             Ui.Column(left.ToArray()) with { Key = "life-page-picker-list" },
@@ -693,7 +697,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         };
         options.AddRange(availability.Select(item => new TaiwuChoiceOption<PageTargetChoice>(
             item.Target, CompactPageTargetLabel(page, item.Target) + $" {item.HolderCount}",
-            Tone: PageTone(item.Target.State))));
+            Tone: PageTone(item.Target.State),
+            Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_combatTaiwuKnowledge, page, item.Target))));
         return Ui.FilterButtons(title, Selection(selected, value =>
         {
             _combatTypes[page] = value.Type;
@@ -717,7 +722,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         };
         options.AddRange(availability.Select(item => new TaiwuChoiceOption<PageTargetChoice>(
             item.Target, LifePageTargetLabel(item.Target.State) + $" {item.HolderCount}",
-            Tone: PageTone(item.Target.State))));
+            Tone: PageTone(item.Target.State),
+            Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_lifeTaiwuKnowledge, page, item.Target))));
         return Ui.FilterButtons(title, Selection(selected, value =>
         {
             _lifeStates[page] = value.State;
@@ -1164,6 +1170,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             if (version != _combatHoldingsVersion || _window?.IsShowing != true) return;
             _combatHoldings = response;
+            _combatTaiwuKnowledge = response.Success
+                ? BookHoldingWorkspace.BuildTaiwuKnowledge(
+                    response.TaiwuBooks, response.TaiwuReadingState, combat: true)
+                : TaiwuBookKnowledge.Empty;
             _holderSetRenderLimit = HolderSetRenderPageSize;
             if (response.Success)
             {
@@ -1179,6 +1189,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         for (int page = 0; page < BookHoldingWorkspace.CombatPageCount; page++)
         {
+            // 正/逆（总纲为任意总纲类型）都已读或已有完整页的书页无需寻访，默认"不限"。
+            if (TaiwuPageMarking.IsPageFullyCoveredByTaiwu(_combatTaiwuKnowledge, page))
+            {
+                _combatTypes[page] = AnyPageTarget.Type;
+                _combatStates[page] = AnyPageTarget.State;
+                continue;
+            }
             BookPageAvailability? preferred = BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true)
                 .Where(item => item.Target.State != 2)
                 .OrderByDescending(item => item.HolderCount)
@@ -1218,6 +1235,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             if (version != _lifeHoldingsVersion || _window?.IsShowing != true) return;
             _lifeHoldings = response;
+            _lifeTaiwuKnowledge = response.Success
+                ? BookHoldingWorkspace.BuildTaiwuKnowledge(
+                    response.TaiwuBooks, response.TaiwuReadingState, combat: false)
+                : TaiwuBookKnowledge.Empty;
             _holderSetRenderLimit = HolderSetRenderPageSize;
             if (response.Success)
             {
@@ -1233,6 +1254,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         for (int page = 0; page < BookHoldingWorkspace.LifePageCount; page++)
         {
+            // 太吾已拥有或已读的书页无需寻访，默认"不限"。
+            if (TaiwuPageMarking.IsPageFullyCoveredByTaiwu(_lifeTaiwuKnowledge, page))
+            {
+                _lifeStates[page] = AnyPageTarget.State;
+                continue;
+            }
             BookPageAvailability? preferred = BookHoldingWorkspace.GetPageAvailability(holders, page, combat: false)
                 .Where(item => item.Target.State != 2)
                 .OrderByDescending(item => item.HolderCount)
@@ -1423,14 +1450,14 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         _combatSect = _combatType = -1; _combatSkill = -1;
         for (int i = 0; i < 6; i++) { _combatStates[i] = 0; _combatTypes[i] = -1; }
-        _combatHoldings = null; RefreshActivePage();
+        _combatHoldings = null; _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty; RefreshActivePage();
     }
 
     private void ResetLife()
     {
         _lifeType = -1; _lifeSkill = -1;
         for (int i = 0; i < 5; i++) _lifeStates[i] = 0;
-        _lifeHoldings = null; RefreshActivePage();
+        _lifeHoldings = null; _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty; RefreshActivePage();
     }
 
     private void ResetPeople()
@@ -1475,6 +1502,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _requestVersion++;
         _combatHoldings = null; _lifeHoldings = null; _personResponse = null; _merchantResponse = null;
         _renxiaResponse = null;
+        _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty; _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
         _personTable.SetItems(Array.Empty<PersonRowView>());
         _merchantTable.SetItems(Array.Empty<MerchantRowView>());
         _renxiaTable.SetItems(Array.Empty<RenxiaRowView>());
@@ -1483,8 +1511,16 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private void MarkBookStale(sbyte kind)
     {
-        if (kind == 0) _combatHoldings = null;
-        else _lifeHoldings = null;
+        if (kind == 0)
+        {
+            _combatHoldings = null;
+            _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+        }
+        else
+        {
+            _lifeHoldings = null;
+            _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
+        }
     }
 
     private void Render()

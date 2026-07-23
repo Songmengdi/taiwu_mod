@@ -762,6 +762,15 @@ internal static class FilterFamilyModule
             CImage image = option.gameObject.AddComponent<CImage>();
             CButton button = option.gameObject.AddComponent<CButton>();
             button.targetGraphic = image;
+            if (initial.Items[index].Highlighted)
+            {
+                // Green wash over the whole button face: a multiply tint on the
+                // dark chrome sprite is nearly invisible, so highlight gets its
+                // own translucent plate below the tone strip and the label.
+                RectTransform highlight = UiFactory.Rect("Highlight", option);
+                UiFactory.Stretch(highlight, new Vector2(2f, 2f), new Vector2(-2f, -2f));
+                theme.ApplyChoiceHighlight(highlight.gameObject.AddComponent<CImage>());
+            }
             if (initial.Items[index].Tone != TaiwuChoiceTone.Neutral)
             {
                 RectTransform tone = UiFactory.Rect("Tone", option);

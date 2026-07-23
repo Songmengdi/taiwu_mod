@@ -39,7 +39,8 @@ internal sealed record BookHolderView(
 
 internal sealed record BookHoldingsResponse(
     bool Success, string Message, string BookName, int ElapsedMs,
-    IReadOnlyList<BookHolderView> Holders);
+    IReadOnlyList<BookHolderView> Holders,
+    IReadOnlyList<BookCopyView> TaiwuBooks, int TaiwuReadingState);
 
 internal sealed record AbilityConditionView(sbyte LifeSkillType, sbyte Metric, short Minimum);
 
@@ -250,9 +251,23 @@ internal static class FinderBackendClient
                 checked((short)Get(data, prefix + "AreaId", -1)), checked((short)Get(data, prefix + "BlockId", -1)),
                 Get(data, prefix + "Organization", string.Empty), checked((sbyte)Get(data, prefix + "Grade", 0)), books));
         }
+        int taiwuBookCount = Get(data, "TaiwuBookCount", 0);
+        var taiwuBooks = new List<BookCopyView>(taiwuBookCount);
+        for (int i = 0; i < taiwuBookCount; i++)
+        {
+            string bookPrefix = $"TB{i}";
+            taiwuBooks.Add(new BookCopyView(
+                Get(data, bookPrefix + "Id", string.Empty),
+                checked((byte)Get(data, bookPrefix + "Source", 0)),
+                checked((byte)Get(data, bookPrefix + "PageTypes", 0)),
+                checked((ushort)Get(data, bookPrefix + "PageStates", 0)),
+                Get(data, bookPrefix + "Coverage", 0)));
+        }
         return new BookHoldingsResponse(
             Get(data, "Success", false), Get(data, "Message", string.Empty),
-            Get(data, "BookName", string.Empty), Get(data, "ElapsedMs", 0), holders);
+            Get(data, "BookName", string.Empty), Get(data, "ElapsedMs", 0), holders,
+            // Older backends without Taiwu-book support: read as none/-1, marks are simply skipped.
+            taiwuBooks, Get(data, "TaiwuReadingState", -1));
     }
 
     private static PersonSearchResponse ParsePersonResponse(SerializableModData data)

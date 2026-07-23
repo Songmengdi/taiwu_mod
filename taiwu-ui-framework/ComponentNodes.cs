@@ -7,7 +7,8 @@ internal sealed record ChoiceItemSnapshot(
     string Label,
     bool Selected,
     bool Interactable,
-    TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral);
+    TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral,
+    bool Highlighted = false);
 internal sealed record ChoiceSnapshot(IReadOnlyList<ChoiceItemSnapshot> Items) : ElementSnapshot;
 internal sealed record ToggleChoiceIntent(int Index) : ElementIntent;
 internal sealed record SelectChoiceIntent(int Index) : ElementIntent;
@@ -49,10 +50,31 @@ internal sealed class ElementStateProjection : IDisposable
 {
     private readonly Func<ElementSnapshot> _read;
     private readonly Action<ElementIntent> _dispatch;
-    private readonly Action _unsubscribe;
-    private bool _disposed;
+    private readonly Action<Action> _subscribe;
+    private readonly Action<Action> _unsubscribe;
+    private readonly Action _onChanged;
+    private Action? _changed;
+    private bool _attached;
 
-    internal event Action? Changed;
+    /// <summary>
+    /// Model attachment is lazy and re-attachable. Compiled nodes (and their
+    /// projections) outlive the native view: closing a window sleeps the
+    /// element and destroys the GameObject, and the next show rebuilds the
+    /// view from the same nodes. View teardown calls <see cref="Dispose"/>,
+    /// so a renderer subscribing <see cref="Changed"/> on rebuild must
+    /// re-attach the projection to the model — otherwise intents still reach
+    /// the model through <see cref="Dispatch"/> while snapshot refreshes never
+    /// fire (frozen tab pages, stale toggles).
+    /// </summary>
+    internal event Action? Changed
+    {
+        add
+        {
+            Attach();
+            _changed += value;
+        }
+        remove => _changed -= value;
+    }
 
     private ElementStateProjection(
         Func<ElementSnapshot> read,
@@ -62,9 +84,9 @@ internal sealed class ElementStateProjection : IDisposable
     {
         _read = read;
         _dispatch = dispatch;
-        Action changed = OnChanged;
-        subscribe(changed);
-        _unsubscribe = () => unsubscribe(changed);
+        _subscribe = subscribe;
+        _unsubscribe = unsubscribe;
+        _onChanged = OnChanged;
     }
 
     internal T Snapshot<T>() where T : ElementSnapshot => (T)_read();
@@ -72,14 +94,22 @@ internal sealed class ElementStateProjection : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        if (!_attached)
             return;
-        _disposed = true;
-        _unsubscribe();
-        Changed = null;
+        _attached = false;
+        _unsubscribe(_onChanged);
+        _changed = null;
     }
 
-    private void OnChanged() => Changed?.Invoke();
+    private void Attach()
+    {
+        if (_attached)
+            return;
+        _attached = true;
+        _subscribe(_onChanged);
+    }
+
+    private void OnChanged() => _changed?.Invoke();
 
     internal static ElementStateProjection Choices<T>(
         TaiwuSelection<T> selection,
@@ -89,7 +119,8 @@ internal sealed class ElementStateProjection : IDisposable
                 option.Label,
                 selection.IsSelected(option.Value),
                 selection.Interactable && option.Interactable,
-                option.Tone)).ToArray()),
+                option.Tone,
+                option.Highlighted)).ToArray()),
             intent =>
             {
                 int index = intent switch

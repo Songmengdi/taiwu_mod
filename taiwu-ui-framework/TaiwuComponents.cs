@@ -226,11 +226,14 @@ public sealed class TaiwuSelection<T>
     }
 }
 
+/// <param name="Highlighted">Tints the option background green to mark it as
+/// already available (for example, owned or learned), without changing its size.</param>
 public sealed record TaiwuChoiceOption<T>(
     T Value,
     string Label,
     bool Interactable = true,
-    TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral);
+    TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral,
+    bool Highlighted = false);
 
 /// <summary>A choice displayed by a field inside a <see cref="TaiwuPopupCardModel"/>.</summary>
 public sealed record TaiwuPopupCardOption(

@@ -179,7 +179,12 @@ internal sealed class TaiwuTheme
     internal void ApplySecondaryTab(CImage image, CButton button, bool selected)
     {
         Sprite? normal = selected ? Find("ui9_btn_second_toggle_2") : null;
-        Sprite? hover = Find("ui9_btn_second_toggle_1");
+        // ui9_btn_second_toggle_1 is a small 18x18 checkbox icon, not tab
+        // artwork; stretching it across the tab produced the gray smear that
+        // replaced the selected tab's red on hover. tap_2 is the highlighted
+        // tab artwork — but the name is shared with a 2x8 divider line, so
+        // resolve it by size to get the 88x52 tab sprite.
+        Sprite? hover = Find("ui9_btn_second_tap_2", 80f) ?? Find("ui9_btn_second_toggle_2");
         image.sprite = normal;
         image.type = Image.Type.Sliced;
         image.color = normal == null ? Color.clear : Color.white;
@@ -684,4 +689,18 @@ internal sealed class TaiwuTheme
     }
 
     private Sprite? Find(string name) => _sprites.TryGetValue(name, out Sprite sprite) ? sprite : null;
+
+    /// <summary>
+    /// Atlas packs reuse some sprite names for unrelated artworks (for example
+    /// ui9_btn_second_tap_2 is both a 2x8 divider line and the 88x52 highlighted
+    /// tab background), and the name-only dictionary picks one arbitrarily.
+    /// This overload scans every loaded sprite with the name and returns the
+    /// widest one meeting the minimum width.
+    /// </summary>
+    private Sprite? Find(string name, float minimumWidth) =>
+        Resources.FindObjectsOfTypeAll<Sprite>()
+            .Where(sprite => sprite != null && sprite.name == name &&
+                sprite.rect.width >= minimumWidth)
+            .OrderByDescending(sprite => sprite.rect.width)
+            .FirstOrDefault();
 }

@@ -1,6 +1,7 @@
 using FrameWork.UISystem.UIElements;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace TaiwuUi;
@@ -594,6 +595,10 @@ internal sealed class FrameworkView : UIBase
             CImage image = tab.gameObject.AddComponent<CImage>();
             CButton button = tab.gameObject.AddComponent<CButton>();
             button.targetGraphic = image;
+            // Unselected tabs keep a transparent base color so the window
+            // background shows through; SpriteSwap multiplies the hover artwork
+            // by that color and the hover would be invisible.
+            tab.gameObject.AddComponent<TaiwuHoverTint>();
             button.onClick.AddListener(() => node.Projection.Dispatch(new SelectChoiceIntent(captured)));
             TextMeshProUGUI label = CreateText(
                 "Label", tab, initial.Items[index].Label, 24f,
@@ -775,5 +780,36 @@ internal sealed class FrameworkView : UIBase
         rect.anchorMax = anchorMax;
         rect.offsetMin = offsetMin;
         rect.offsetMax = offsetMax;
+    }
+}
+
+/// <summary>
+/// Keeps a tab's target graphic at full opacity while hovered. Secondary tabs
+/// use a transparent base color when unselected (the window background shows
+/// through), and Unity's SpriteSwap multiplies the hover artwork by that
+/// color, making the hover invisible. On exit the base color is recomputed
+/// from the current base sprite, mirroring TaiwuTheme.ApplySecondaryTab, so a
+/// selection change during hover cannot strand a stale color.
+/// </summary>
+internal sealed class TaiwuHoverTint : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+{
+    private Graphic? _graphic;
+
+    private void Awake() => _graphic = GetComponent<Graphic>();
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (_graphic != null)
+            _graphic.color = Color.white;
+    }
+
+    public void OnPointerExit(PointerEventData eventData) => ApplyBaseColor();
+
+    private void OnDisable() => ApplyBaseColor();
+
+    private void ApplyBaseColor()
+    {
+        if (_graphic is Image image)
+            image.color = image.sprite == null ? Color.clear : Color.white;
     }
 }

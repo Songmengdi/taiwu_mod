@@ -219,7 +219,16 @@ internal sealed class FrameworkView : UIBase
                     textNode.Options.MinimumHeight, textNode.Options.FontSize * 1.5f);
                 element.minHeight = textHeight;
                 element.preferredHeight = textHeight;
-                element.flexibleWidth = 1f;
+                if (textNode.Options.Width is float width)
+                {
+                    element.minWidth = width;
+                    element.preferredWidth = width;
+                    element.flexibleWidth = 0f;
+                }
+                else
+                {
+                    element.flexibleWidth = 1f;
+                }
                 element.flexibleHeight = 0f;
                 break;
             }
@@ -319,6 +328,7 @@ internal sealed class FrameworkView : UIBase
                 // stale or empty content that never catches up with the live value.
                 void RebuildHost(UiElement content)
                 {
+                    Dictionary<string, float> scrollOffsets = CaptureVerticalScrollOffsets(host);
                     List<UiNode> nextNodes;
                     try
                     {
@@ -342,6 +352,9 @@ internal sealed class FrameworkView : UIBase
                         }
                         BuildNodes(host, nextNodes);
                         Canvas.ForceUpdateCanvases();
+                        RestoreVerticalScrollOffsets(host, scrollOffsets);
+                        DeferredUiAction.Run(host.gameObject,
+                            () => RestoreVerticalScrollOffsets(host, scrollOffsets));
                     }
                     catch (Exception exception)
                     {
@@ -355,6 +368,50 @@ internal sealed class FrameworkView : UIBase
                     () => host != null,
                     RebuildHost);
                 UiFactory.Lifetime(host).Add(() => dynamicNode.Content.AdapterValueChanged -= refresh);
+                break;
+            }
+
+            case AppendListNode appendListNode:
+            {
+                RectTransform root = CreateRect(
+                    "AppendList", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero);
+                UiFactory.Layout(root, -1f, -1f, flexibleWidth: 1f);
+                var layout = root.gameObject.AddComponent<VerticalLayoutGroup>();
+                layout.spacing = 2f;
+                layout.childAlignment = TextAnchor.UpperLeft;
+                layout.childControlWidth = true;
+                layout.childForceExpandWidth = true;
+                layout.childControlHeight = true;
+                layout.childForceExpandHeight = false;
+                root.gameObject.AddComponent<ContentSizeFitter>().verticalFit =
+                    ContentSizeFitter.FitMode.PreferredSize;
+
+                BuildNodes(root, appendListNode.InitialChildren);
+                int appendSequence = 0;
+                Action<IReadOnlyList<UiElement>>? append = null;
+                append = items =>
+                {
+                    if (root == null)
+                    {
+                        appendListNode.Items.ItemsAppended -= append;
+                        return;
+                    }
+
+                    try
+                    {
+                        List<UiNode> nextNodes = UiElementCompiler.CompileChildren(items);
+                        UiRenderPlanCompiler.AssignIdentities(
+                            nextNodes, appendListNode.Identity + "/append-" + appendSequence++);
+                        BuildNodes(root, nextNodes);
+                        Canvas.ForceUpdateCanvases();
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogException(exception);
+                    }
+                };
+                appendListNode.Items.ItemsAppended += append;
+                UiFactory.Lifetime(root).Add(() => appendListNode.Items.ItemsAppended -= append);
                 break;
             }
 
@@ -452,6 +509,45 @@ internal sealed class FrameworkView : UIBase
         UiElementIdentity identity = root.AddComponent<UiElementIdentity>();
         identity.Path = node.Identity;
         identity.Kind = node.GetType().Name;
+    }
+
+    private static Dictionary<string, float> CaptureVerticalScrollOffsets(Transform root)
+    {
+        var offsets = new Dictionary<string, float>();
+        foreach (ScrollRect scroll in root.GetComponentsInChildren<ScrollRect>(true))
+        {
+            if (!scroll.vertical || scroll.content == null)
+                continue;
+            UiElementIdentity? identity = scroll.GetComponentInParent<UiElementIdentity>();
+            if (identity != null)
+            {
+                offsets[identity.StateKey(scroll.transform.GetSiblingIndex())] =
+                    Mathf.Max(0f, scroll.content.anchoredPosition.y);
+            }
+        }
+        return offsets;
+    }
+
+    private static void RestoreVerticalScrollOffsets(
+        Transform root, IReadOnlyDictionary<string, float> offsets)
+    {
+        if (offsets.Count == 0)
+            return;
+
+        foreach (ScrollRect scroll in root.GetComponentsInChildren<ScrollRect>(true))
+        {
+            if (!scroll.vertical || scroll.content == null || scroll.viewport == null)
+                continue;
+            UiElementIdentity? identity = scroll.GetComponentInParent<UiElementIdentity>();
+            if (identity == null || !offsets.TryGetValue(
+                    identity.StateKey(scroll.transform.GetSiblingIndex()), out float offset))
+                continue;
+
+            float range = Mathf.Max(0f, scroll.content.rect.height - scroll.viewport.rect.height);
+            scroll.verticalNormalizedPosition = range <= 0f
+                ? 1f
+                : 1f - Mathf.Min(offset, range) / range;
+        }
     }
 
     internal UiRuntimeState CaptureRuntimeState()
@@ -774,6 +870,8 @@ internal sealed class FrameworkView : UIBase
             Math.Max(0, column.Children.Count - 1) * column.Spacing,
         FlexNode flex => flex.Children.Sum(PreferredHeight),
         DynamicNode dynamic => dynamic.Height,
+        AppendListNode appendList => appendList.InitialChildren.Sum(PreferredHeight) +
+            Math.Max(0, appendList.InitialChildren.Count - 1) * 2f,
         NativeImageNode image => image.Height,
         NativeHostNode host => host.Height,
         TabsNode tabs => tabs.Height,

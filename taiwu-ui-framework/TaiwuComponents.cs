@@ -112,6 +112,34 @@ internal static class DynamicContentSubscription
     }
 }
 
+/// <summary>
+/// Append-only UI content. Appending preserves already-mounted native elements,
+/// which is useful for paged lists that contain expensive or stateful hosts.
+/// </summary>
+public sealed class TaiwuAppendList
+{
+    private readonly List<UiElement> _items;
+
+    public IReadOnlyList<UiElement> Items => _items;
+
+    internal event Action<IReadOnlyList<UiElement>>? ItemsAppended;
+
+    public TaiwuAppendList(IEnumerable<UiElement>? initialItems = null)
+    {
+        _items = initialItems?.Where(item => item != null).ToList() ?? new List<UiElement>();
+    }
+
+    public void Append(IEnumerable<UiElement> items)
+    {
+        UiElement[] appended = items?.Where(item => item != null).ToArray() ?? Array.Empty<UiElement>();
+        if (appended.Length == 0)
+            return;
+
+        _items.AddRange(appended);
+        ItemsAppended?.Invoke(appended);
+    }
+}
+
 public sealed class TaiwuSelection<T>
 {
     private readonly HashSet<T> _selected;
@@ -234,6 +262,16 @@ public sealed record TaiwuChoiceOption<T>(
     bool Interactable = true,
     TaiwuChoiceTone Tone = TaiwuChoiceTone.Neutral,
     bool Highlighted = false);
+
+/// <summary>
+/// An action rendered as the first peer of a filter-choice group. Unlike a regular
+/// choice it does not participate in that group's selection model.
+/// </summary>
+public sealed record TaiwuChoiceAction(
+    string Label,
+    Action OnClick,
+    Func<bool>? IsSelected = null,
+    bool Interactable = true);
 
 /// <summary>A choice displayed by a field inside a <see cref="TaiwuPopupCardModel"/>.</summary>
 public sealed record TaiwuPopupCardOption(

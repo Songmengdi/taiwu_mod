@@ -42,6 +42,15 @@ public sealed record UiDynamicElement(TaiwuValue<UiElement> Content, float Heigh
         Math.Max(0f, Height));
 }
 
+/// <summary>Renders initial content once and mounts later items by appending them.</summary>
+public sealed record UiAppendListElement(TaiwuAppendList Items) : UiElement
+{
+    internal override IEnumerable<UiElement> ChildElements => Items.Items;
+    internal override UiNode Compile() => new AppendListNode(
+        Items,
+        UiElementCompiler.CompileChildren(Items.Items));
+}
+
 public sealed record UiTextElement(string Text, TaiwuTextOptions Options) : UiElement
 {
     internal override UiNode Compile() => new TextNode(Text ?? string.Empty, Options with { });
@@ -120,12 +129,14 @@ public sealed record UiFilterButtonsElement<T>(
     string Label,
     TaiwuSelection<T> Selection,
     IReadOnlyList<TaiwuChoiceOption<T>> Items,
-    bool Compact = false) : UiElement
+    bool Compact = false,
+    TaiwuChoiceAction? LeadingAction = null) : UiElement
 {
     internal override UiNode Compile() => new ChoiceGroupNode(
         Label ?? string.Empty,
         ElementStateProjection.Choices(Selection, Items),
-        Compact);
+        Compact,
+        leadingAction: LeadingAction);
 }
 
 /// <summary>
@@ -363,6 +374,8 @@ public static class Ui
         new(content ?? throw new ArgumentNullException(nameof(content)), grow);
     public static UiDynamicElement Dynamic(TaiwuValue<UiElement> content, float height) =>
         new(content ?? throw new ArgumentNullException(nameof(content)), height);
+    public static UiAppendListElement AppendList(TaiwuAppendList items) =>
+        new(items ?? throw new ArgumentNullException(nameof(items)));
     public static UiTextElement Text(string text, TaiwuTextOptions? options = null) =>
         new(text ?? string.Empty, options ?? new TaiwuTextOptions());
     public static UiTextElement Heading(string text) => new(text ?? string.Empty, new TaiwuTextOptions
@@ -401,7 +414,8 @@ public static class Ui
         new(UiActionIcon.Refresh, onRefresh, size);
     public static UiFilterButtonsElement<T> FilterButtons<T>(
         string label, TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
-        bool compact = false) => new(label, selection, items, compact);
+        bool compact = false, TaiwuChoiceAction? leadingAction = null) =>
+        new(label, selection, items, compact, leadingAction);
     public static UiSelectButtonsElement<T> SelectButtons<T>(
         TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
         bool compact = false) => new(selection, items, compact);

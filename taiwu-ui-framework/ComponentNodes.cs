@@ -422,13 +422,15 @@ internal sealed class ChoiceGroupNode(
     ElementStateProjection projection,
     bool compact,
     bool selectOnly = false,
-    ChoiceGroupAppearance appearance = ChoiceGroupAppearance.Filter) : UiNode
+    ChoiceGroupAppearance appearance = ChoiceGroupAppearance.Filter,
+    TaiwuChoiceAction? leadingAction = null) : UiNode
 {
     internal string Label { get; } = label;
     internal ElementStateProjection Projection { get; } = projection;
     internal bool Compact { get; } = compact;
     internal bool SelectOnly { get; } = selectOnly;
     internal ChoiceGroupAppearance Appearance { get; } = appearance;
+    internal TaiwuChoiceAction? LeadingAction { get; } = leadingAction;
 }
 
 internal sealed class PopupSelectNode(

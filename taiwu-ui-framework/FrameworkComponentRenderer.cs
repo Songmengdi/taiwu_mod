@@ -750,6 +750,25 @@ internal static class FilterFamilyModule
         // TaiwuFlowLayout reports the correct height after measuring all wrapped options.
         UiFactory.Layout(flowRoot, -1f, -1f, flexibleWidth: 1f);
 
+        CImage? leadingImage = null;
+        CButton? leadingButton = null;
+        if (node.LeadingAction is TaiwuChoiceAction leadingAction)
+        {
+            RectTransform option = UiFactory.Rect("LeadingAction", flowRoot);
+            float width = Math.Max(
+                node.Compact ? 68f : 114f,
+                leadingAction.Label.Length * 24f + (node.Compact ? 20f : 42f));
+            UiFactory.Layout(option, width, flow.ItemHeight, flexibleWidth: 0f);
+            leadingImage = option.gameObject.AddComponent<CImage>();
+            leadingButton = option.gameObject.AddComponent<CButton>();
+            leadingButton.targetGraphic = leadingImage;
+            TextMeshProUGUI text = UiFactory.Text(
+                "Label", option, leadingAction.Label, 24f, theme,
+                TaiwuTextStyle.Body, TextAlignmentOptions.Center);
+            UiFactory.Stretch(text.rectTransform, new Vector2(8f, 0f), new Vector2(-8f, 0f));
+            leadingButton.onClick.AddListener(() => leadingAction.OnClick());
+        }
+
         var buttons = new List<(CImage Image, CButton Button)>();
         ChoiceSnapshot initial = node.Projection.Snapshot<ChoiceSnapshot>();
         for (int index = 0; index < initial.Items.Count; index++)
@@ -808,6 +827,18 @@ internal static class FilterFamilyModule
 
         void Refresh()
         {
+            if (node.LeadingAction is TaiwuChoiceAction leadingAction &&
+                leadingImage != null && leadingButton != null)
+            {
+                ApplyChoiceVisual(
+                    leadingImage,
+                    leadingButton,
+                    leadingAction.IsSelected?.Invoke() ?? false,
+                    leadingAction.Interactable,
+                    node.Appearance,
+                    theme);
+            }
+
             ChoiceSnapshot snapshot = node.Projection.Snapshot<ChoiceSnapshot>();
             for (int index = 0; index < buttons.Count; index++)
                 ApplyChoiceVisual(

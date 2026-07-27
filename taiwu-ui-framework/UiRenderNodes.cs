@@ -77,6 +77,14 @@ internal sealed class DynamicNode(
     internal float Height { get; } = height;
 }
 
+internal sealed class AppendListNode(
+    TaiwuAppendList items,
+    List<UiNode> initialChildren) : UiNode
+{
+    internal TaiwuAppendList Items { get; } = items;
+    internal List<UiNode> InitialChildren { get; } = initialChildren;
+}
+
 internal sealed class DividerNode : UiNode;
 
 internal sealed class SpacerNode(float height) : UiNode

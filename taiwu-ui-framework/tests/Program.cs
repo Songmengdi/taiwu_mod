@@ -92,7 +92,8 @@ UiElement content = Ui.Column(
     {
         new TaiwuChoiceOption<string>("plain", "普通"),
         new TaiwuChoiceOption<string>("good", "优秀"),
-    }) with { Key = "filters" },
+    }, leadingAction: new TaiwuChoiceAction("不限", filterSelection.Clear,
+        () => filterSelection.Selected.Count == 0)) with { Key = "filters" },
     Ui.SelectButtons(selectButtons, new[]
     {
         new TaiwuChoiceOption<string>("here", "本地"),
@@ -133,7 +134,7 @@ UiValidationResult validation = TaiwuUiApi.Validate(window);
 Expect(validation.IsValid, true, "declarative window validates");
 Expect(validation.Errors.Count, 0, "declarative window errors");
 Expect(window.Key, "contract:declarative", "stable window key");
-Expect(((UiColumnElement)window.Content).Children.Count, 13, "public element tree");
+Expect(((UiColumnElement)window.Content).Children.Count, 14, "public element tree");
 Expect(bottomSelection.IsSelected("all"), false, "validation has no state side effects");
 
 var responsive = new UiWindow("contract", "responsive", Ui.Row(
@@ -142,6 +143,12 @@ var responsive = new UiWindow("contract", "responsive", Ui.Row(
 Expect(TaiwuUiApi.Validate(responsive).IsValid, true, "flex dynamic layout validates");
 dynamicContent.SetValue(Ui.Text("新详情"));
 Expect(dynamicContent.Value, Ui.Text("新详情"), "dynamic content is controlled state");
+
+var appendList = new TaiwuAppendList(new[] { Ui.Text("已挂载") with { Key = "mounted" } });
+var incremental = new UiWindow("contract", "append", Ui.AppendList(appendList) with { Key = "append" });
+Expect(TaiwuUiApi.Validate(incremental).IsValid, true, "append list validates");
+appendList.Append(new[] { Ui.Text("后续追加") with { Key = "appended" } });
+Expect(appendList.Items.Count, 2, "append list preserves mounted items");
 
 var duplicateKeys = new UiWindow("contract", "duplicate", Ui.Column(
     Ui.Text("A") with { Key = "same" },

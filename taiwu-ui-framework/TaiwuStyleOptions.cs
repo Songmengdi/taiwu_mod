@@ -6,6 +6,8 @@ public sealed record TaiwuTextOptions
     public float FontSize { get; init; } = TaiwuUiMetrics.BodyFontSize;
     public float MinimumHeight { get; init; } = TaiwuUiMetrics.BodyTextHeight;
     public TaiwuTextStyle Style { get; init; } = TaiwuTextStyle.Body;
+    /// <summary>Optional fixed width for text used as a compact row label.</summary>
+    public float? Width { get; init; }
 }
 
 /// <summary>Overrides for a button node. Omit this object to use the native standard preset.</summary>

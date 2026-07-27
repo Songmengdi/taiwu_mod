@@ -54,6 +54,9 @@ internal static class UiRenderPlanCompiler
                 case DynamicNode dynamic:
                     AssignIdentities(dynamic.Children, node.Identity);
                     break;
+                case AppendListNode appendList:
+                    AssignIdentities(appendList.InitialChildren, node.Identity + "/initial");
+                    break;
                 case ScrollNode scroll:
                     AssignIdentities(scroll.Children, node.Identity);
                     break;

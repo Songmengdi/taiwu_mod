@@ -15,6 +15,11 @@ internal static class MapMarkTracker
 
     internal static bool HasMarks => MarkedLocations.Count > 0;
 
+    /// <summary>Area of the current marks; null when nothing is marked. All marks
+    /// live in one area because ReplaceMarks wipes the previous set.</summary>
+    internal static short? MarkedAreaId =>
+        MarkedLocations.Count == 0 ? null : MarkedLocations.First().AreaId;
+
     /// <summary>Identifies the finder entry (holder set / person / merchant …)
     /// whose mark is currently on the map, so the UI can show it as 已标记 after
     /// the window is reopened. Null when nothing is marked.</summary>

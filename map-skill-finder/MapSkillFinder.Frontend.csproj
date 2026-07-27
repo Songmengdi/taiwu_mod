@@ -25,11 +25,13 @@
     <Compile Include="FinderBackendClient.cs" />
     <Compile Include="AreaSearchPlan.cs" />
     <Compile Include="TaiwuPageMarking.cs" />
+    <Compile Include="PageTargetFilter.cs" />
     <Compile Include="BookHoldingWorkspace.cs" />
     <Compile Include="FindMapBlockPatch.cs" />
     <Compile Include="MapMarkTracker.cs" />
     <Compile Include="SkillFinderWindow.cs" />
     <Compile Include="NativeCharacterCard.cs" />
+    <Compile Include="TextStyleHelperRefreshGuardPatch.cs" />
     <Compile Include="RuntimePreview.cs" />
     <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
     <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />

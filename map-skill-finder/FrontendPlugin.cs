@@ -18,6 +18,7 @@ public sealed class FrontendPlugin : TaiwuRemakePlugin
         _harmony = new Harmony(GetGuid());
         _harmony.PatchAll(typeof(FrontendPlugin).Assembly);
         FinderCharacterJieqingSignPatch.Install(_harmony);
+        TextStyleHelperRefreshGuardPatch.Install(_harmony);
     }
 
     public override void Dispose()

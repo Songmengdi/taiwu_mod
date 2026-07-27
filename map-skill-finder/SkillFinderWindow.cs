@@ -26,16 +26,25 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private sealed record CombatBookOption(short TemplateId, string Name, int Order);
     private sealed class CombatAreaHoldings
     {
-        internal CombatAreaHoldings(short areaId, BookHoldingsResponse holdings)
+        internal CombatAreaHoldings(
+            short areaId,
+            BookHoldingsResponse holdings,
+            Action pageTargetsChanged)
         {
             AreaId = areaId;
             Holdings = holdings;
+            PageTargets = Enumerable.Range(0, BookHoldingWorkspace.CombatPageCount)
+                .Select(_ => new TaiwuSelection<PageTargetChoice>(TaiwuSelectionMode.Multiple))
+                .ToArray();
+            foreach (TaiwuSelection<PageTargetChoice> selection in PageTargets)
+                selection.SelectionChanged += _ => pageTargetsChanged();
         }
 
         internal short AreaId { get; }
         internal BookHoldingsResponse Holdings { get; }
-        internal sbyte[] States { get; } = new sbyte[BookHoldingWorkspace.CombatPageCount];
-        internal sbyte[] Types { get; } = Enumerable.Repeat((sbyte)-1, BookHoldingWorkspace.CombatPageCount).ToArray();
+        // Concrete variants are combined with OR. No selected variant means
+        // that this page remains unrestricted.
+        internal TaiwuSelection<PageTargetChoice>[] PageTargets { get; }
     }
 
     private sealed class LifeAreaHoldings
@@ -126,6 +135,10 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private int _catalogDateTick;
     private float _nextWorldCheckAt = -1f;
     private bool _worldCheckInFlight;
+    // Set when a native character interaction was opened from a finder card; the
+    // conversation may change favorability/holdings, so cached query results are
+    // dropped on the next Open.
+    private bool _characterInteractionPending;
 
     private readonly TaiwuSelection<sbyte> _mainTab = new(TaiwuSelectionMode.Single, new sbyte[] { 0 });
     private readonly TaiwuSelection<byte> _bookSources =
@@ -312,6 +325,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         EnsureBookCatalog();
         _activeTab = _mainTab.Selected.Count == 0 ? (sbyte)0 : _mainTab.Selected.First();
+        if (_characterInteractionPending)
+        {
+            _characterInteractionPending = false;
+            MarkAllStale();
+        }
+        SyncAreaTabsWithMarks();
         if (_window == null)
         {
             for (int index = 0; index < _tabContent.Length; index++)
@@ -322,6 +341,12 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 ClearStatus();
             _tabContent[_activeTab].SetValueWithoutNotify(BuildActiveTabPage());
             Render();
+        }
+        else
+        {
+            // Rebuild so mark labels and 可交互/仅查看 states reflect moves and
+            // mark changes that happened while the window was closed.
+            RefreshActivePage();
         }
         _window!.Show();
         _nextWorldCheckAt = Time.unscaledTime + WorldCheckIntervalSeconds;
@@ -375,12 +400,25 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _window?.Hide();
     }
 
+    private void OnEnable() =>
+        GEvent.Add(UiEvents.WorldMapPlayerBlockChange, OnPlayerBlockChange);
+
     private void OnDisable()
     {
+        GEvent.Remove(UiEvents.WorldMapPlayerBlockChange, OnPlayerBlockChange);
         _requestVersion++;
         CancelInFlightSearches();
         _window?.Dispose();
         _window = null;
+    }
+
+    // Moving to another block flips which entries are 可交互; rebuild the page
+    // so labels and card graying follow Taiwu. The world-stamp poll only covers
+    // area moves, same-area moves are only observable through this event.
+    private void OnPlayerBlockChange(ArgumentBox args)
+    {
+        if (_window?.IsShowing == true)
+            RefreshActivePage();
     }
 
     private bool Accept(int version) => version == _requestVersion && _window?.IsShowing == true;
@@ -767,14 +805,15 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         IReadOnlyList<TaiwuChoiceOption<short>> sheets)
     {
         IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
-        IReadOnlyList<PageTargetChoice> targets = area.Types
-            .Select((type, page) => new PageTargetChoice(type, area.States[page]))
+        IReadOnlyList<IReadOnlyCollection<PageTargetChoice>> targets = area.PageTargets
+            .Select(selection => selection.Selected)
             .ToArray();
         IReadOnlyList<BookHolderSet> sets = BookHoldingWorkspace.FindHolderSets(holders, targets, combat: true);
 
         var left = new List<UiElement>
         {
             Ui.Muted($"{holders.Count} 人持有此书。点击实际存在的书页状态；默认优先选择持有人最多的完整状态。"),
+            Ui.Muted("每页可多选；点击「不限」可清空该页的具体选择。"),
         };
         if (TaiwuPageMarking.HasAnyMark(_combatTaiwuKnowledge))
             left.Add(Ui.Muted("绿色背景 = 太吾已有或已读的书页，无需再寻。"));
@@ -837,45 +876,40 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         short areaId,
         UiElement resultToolbar)
     {
-        var right = new List<UiElement>();
-        // Render in pages: mounting all capped sets at once creates well over a
-        // thousand UI objects and noticeably drags the frame rate down.
-        IReadOnlyList<BookHolderSet> visible = sets.Take(_holderSetRenderLimit).ToArray();
-        int previousCount = -1;
-        foreach (BookHolderSet set in visible)
+        IReadOnlyList<BookHolderSet> orderedSets = OrderHolderSets(sets);
+        int shown = Math.Min(_holderSetRenderLimit, orderedSets.Count);
+        var renderedSets = new TaiwuAppendList(
+            BuildHolderSetBatch(orderedSets, 0, shown, key, areaId));
+        var pagerFooter = new TaiwuValue<UiElement>(Ui.Spacer(0f));
+
+        void AppendMore()
         {
-            int count = set.Holders.Count;
-            if (count != previousCount)
-            {
-                int countAtThisSize = sets.Count(item => item.Holders.Count == count);
-                right.Add(Ui.Heading($"{count} 人组合 · {countAtThisSize} 套"));
-                right.Add(Ui.Divider());
-                previousCount = count;
-            }
-            right.Add(BuildHolderSetRow(set, key, areaId));
+            int next = Math.Min(shown + HolderSetRenderPageSize, orderedSets.Count);
+            renderedSets.Append(BuildHolderSetBatch(orderedSets, shown, next - shown, key, areaId));
+            shown = next;
+            _holderSetRenderLimit = shown;
+            pagerFooter.SetValueWithoutNotify(BuildHolderSetPager(shown, orderedSets.Count, AppendMore));
         }
-        if (sets.Count > visible.Count)
-        {
-            int more = Math.Min(HolderSetRenderPageSize, sets.Count - visible.Count);
-            right.Add(Ui.Button($"再显示 {more} 套（已显示 {visible.Count}/{sets.Count}）",
-                () =>
-                {
-                    _holderSetRenderLimit += HolderSetRenderPageSize;
-                    RefreshActivePage();
-                },
-                new TaiwuButtonOptions { Width = 360f, Style = TaiwuButtonStyle.Outlined }));
-        }
-        if (sets.Count == BookHoldingWorkspace.MaxRenderedSets)
-            right.Add(Ui.Muted($"组合较多，当前仅计算前 {BookHoldingWorkspace.MaxRenderedSets} 套。"));
+
+        pagerFooter.SetValueWithoutNotify(BuildHolderSetPager(shown, orderedSets.Count, AppendMore));
+        UiElement resultList = Ui.Column(
+            Ui.AppendList(renderedSets) with { Key = key + "-holder-set-list" },
+            Ui.Dynamic(pagerFooter, 62f) with { Key = key + "-holder-set-pager" },
+            sets.Count == BookHoldingWorkspace.MaxRenderedSets
+                ? Ui.Muted($"组合较多，当前仅计算前 {BookHoldingWorkspace.MaxRenderedSets} 套。")
+                : Ui.Spacer(0f));
 
         // Header stays outside the scroll so the set count remains visible while
         // scrolling through combinations. Query actions live in the shared toolbar.
         UiElement holderPane = Ui.Column(
-            Ui.Heading("需要寻访的人") with { Key = key + "-holding-header" },
-            Ui.Muted(sets.Count == 0
-                ? "当前目标没有可覆盖的持有人组合。"
-                : $"共 {sets.Count} 套组合，按人数由少到多排序。"),
-            Ui.Scroll(Ui.Column(right.ToArray()) with { Key = key + "-holder-set-list" },
+            Ui.Row(
+                Ui.Heading("需要寻访的人"),
+                Ui.Flex(Ui.Spacer(0f)),
+                Ui.Muted("人数优先")) with { Key = key + "-holding-header" },
+            sets.Count == 0
+                ? Ui.Muted("当前目标没有可覆盖的持有人组合。")
+                : Ui.Spacer(0f),
+            Ui.Scroll(resultList,
                 new TaiwuScrollOptions { Height = 760f, ShowBackground = true })
                 with { Key = key + "-holder-set-scroll" })
             with { Key = key + "-holder-pane" };
@@ -890,6 +924,43 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             columns) with { Key = key + "-holding-workspace" };
     }
 
+    private IReadOnlyList<UiElement> BuildHolderSetBatch(
+        IReadOnlyList<BookHolderSet> orderedSets,
+        int start,
+        int count,
+        string key,
+        short areaId)
+    {
+        var elements = new List<UiElement>();
+        int end = Math.Min(start + count, orderedSets.Count);
+        int previousHolderCount = start > 0 ? orderedSets[start - 1].Holders.Count : -1;
+        for (int index = start; index < end; index++)
+        {
+            BookHolderSet set = orderedSets[index];
+            if (set.Holders.Count != previousHolderCount)
+            {
+                int countAtThisSize = orderedSets.Count(item => item.Holders.Count == set.Holders.Count);
+                elements.Add(Ui.Heading($"{set.Holders.Count} 人组合 · {countAtThisSize} 套"));
+                elements.Add(Ui.Divider());
+                previousHolderCount = set.Holders.Count;
+            }
+
+            elements.Add(BuildHolderSetRow(set, key, areaId));
+            elements.Add(Ui.Divider());
+        }
+        return elements;
+    }
+
+    private static UiElement BuildHolderSetPager(int shown, int total, Action appendMore)
+    {
+        if (shown >= total)
+            return Ui.Spacer(0f);
+
+        int more = Math.Min(HolderSetRenderPageSize, total - shown);
+        return Ui.Button($"再显示 {more} 套（已显示 {shown}/{total}）", appendMore,
+            new TaiwuButtonOptions { Width = 360f, Style = TaiwuButtonStyle.Outlined });
+    }
+
     // Wildcard page target ("不限"): the page is covered by any holder.
     private static readonly PageTargetChoice AnyPageTarget = new(-1, -1);
 
@@ -898,25 +969,22 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         IReadOnlyList<BookHolderView> holders = area.Holdings.Holders;
         IReadOnlyList<BookPageAvailability> availability =
             BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true);
-        PageTargetChoice selected = new(area.Types[page], area.States[page]);
+        TaiwuSelection<PageTargetChoice> selection = area.PageTargets[page];
         string title = page == 0 ? "总纲" : $"第{page}页";
         if (availability.Count == 0)
             return Ui.Column(Ui.Heading(title), Ui.Muted("无可用书页"));
 
-        var options = new List<TaiwuChoiceOption<PageTargetChoice>>
-        {
-            new(AnyPageTarget, $"不限 {holders.Count}"),
-        };
-        options.AddRange(availability.Select(item => new TaiwuChoiceOption<PageTargetChoice>(
+        TaiwuChoiceOption<PageTargetChoice>[] options = availability.Select(item => new TaiwuChoiceOption<PageTargetChoice>(
             item.Target, CompactPageTargetLabel(page, item.Target) + $" {item.HolderCount}",
             Tone: PageTone(item.Target.State),
-            Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_combatTaiwuKnowledge, page, item.Target))));
-        return Ui.FilterButtons(title, Selection(selected, value =>
-        {
-            area.Types[page] = value.Type;
-            area.States[page] = value.State;
-            RefreshActivePage();
-        }), options.ToArray(), compact: true) with { Key = $"combat-{area.AreaId}-holding-page-{page}" };
+            Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_combatTaiwuKnowledge, page, item.Target)))
+            .ToArray();
+        return Ui.Row(
+                Ui.Text(title, new TaiwuTextOptions { MinimumHeight = 40f, Width = 104f }),
+                Ui.Flex(Ui.FilterButtons(string.Empty, selection, options, compact: true,
+                    leadingAction: new TaiwuChoiceAction(
+                        "不限", selection.Clear, () => selection.Selected.Count == 0))))
+            with { Key = $"combat-{area.AreaId}-holding-page-{page}" };
     }
 
     private UiElement BuildLifeHoldingPagePicker(LifeAreaHoldings area, int page)
@@ -937,11 +1005,31 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             item.Target, LifePageTargetLabel(item.Target.State) + $" {item.HolderCount}",
             Tone: PageTone(item.Target.State),
             Highlighted: TaiwuPageMarking.IsVariantCoveredByTaiwu(_lifeTaiwuKnowledge, page, item.Target))));
-        return Ui.FilterButtons(title, Selection(selected, value =>
+        return Ui.Row(
+                Ui.Text(title, new TaiwuTextOptions { MinimumHeight = 40f, Width = 104f }),
+                Ui.Flex(Ui.FilterButtons(string.Empty, Selection(selected, value =>
+                {
+                    area.States[page] = value.State;
+                    RefreshActivePage();
+                }), options.ToArray(), compact: true)))
+            with { Key = $"life-{area.AreaId}-holding-page-{page}" };
+    }
+
+    private IReadOnlyList<BookHolderSet> OrderHolderSets(IReadOnlyList<BookHolderSet> sets)
+    {
+        string? markedKey = MapMarkTracker.MarkedKey;
+        IOrderedEnumerable<BookHolderSet> ordered = sets
+            .OrderByDescending(set => markedKey == "book:" + set.Key)
+            .ThenBy(set => set.Holders.Count);
+
+        if (_catalog?.ApiVersion >= 6)
         {
-            area.States[page] = value.State;
-            RefreshActivePage();
-        }), options.ToArray(), compact: true) with { Key = $"life-{area.AreaId}-holding-page-{page}" };
+            ordered = ordered
+                .ThenByDescending(set => set.Holders.Min(holder => (int)holder.Favorability))
+                .ThenByDescending(set => set.Holders.Sum(holder => (int)holder.Favorability));
+        }
+
+        return ordered.ThenBy(set => set.Key).ToArray();
     }
 
     private static string LifePageTargetLabel(sbyte state) =>
@@ -958,18 +1046,20 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private UiElement BuildHolderSetRow(BookHolderSet set, string key, short areaId)
     {
-        UiElement summary = Ui.Column(
-            Ui.Row(set.Holders.Select(holder => Ui.Column(
-                BuildCharacterCard(holder.CharacterId, holder.Name, holder.Position, holder.Grade,
-                    holder.AvatarData, holder.AreaId, holder.BlockId),
-                NativeCharacterCard.IsAtTaiwuLocation(holder.AreaId, holder.BlockId)
-                    ? Ui.Text($"可交互 · 地格 {holder.BlockId}")
-                    : Ui.Muted($"仅查看 · 地格 {holder.BlockId}")) with
-                {
-                    Key = "holder-" + holder.CharacterId,
-                }).ToArray()),
-            Ui.Spacer(6f),
-            Ui.Divider());
+        UiElement[] cards = set.Holders.Select(holder => Ui.Column(
+            BuildCharacterCard(holder.CharacterId, holder.Name, holder.Position, holder.Grade,
+                holder.AvatarData, holder.AreaId, holder.BlockId),
+            BuildHolderStatus(holder)) with
+            {
+                Key = "holder-" + holder.CharacterId,
+            }).ToArray();
+        UiElement summary = cards.Length <= 3
+            ? Ui.Row(cards)
+            : Ui.Column(cards
+                .Select((card, index) => new { card, index })
+                .GroupBy(item => item.index / 2)
+                .Select(group => Ui.Row(group.Select(item => item.card).ToArray()))
+                .ToArray());
 
         if (!CanMarkArea(areaId))
             return summary with { Key = key + "-holder-set-" + set.Key };
@@ -982,6 +1072,20 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         {
             Key = key + "-holder-set-" + set.Key,
         };
+    }
+
+    private UiElement BuildHolderStatus(BookHolderView holder)
+    {
+        string interaction = NativeCharacterCard.IsAtTaiwuLocation(holder.AreaId, holder.BlockId)
+            ? "可交互"
+            : "仅查看";
+        if (_catalog?.ApiVersion < 6)
+            return Ui.Muted(interaction);
+
+        string favorability = holder.FavorabilityIsInitial
+            ? $"初识好感 {holder.Favorability:#,0}"
+            : $"好感 {holder.Favorability:#,0}";
+        return Ui.Text($"{interaction} · {favorability}");
     }
 
     private void MarkHolderSet(BookHolderSet set, string markKey, short areaId)
@@ -1161,7 +1265,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 SearchPeople, () => SearchPeople(forceFullMap: true), loadMore),
             Ui.Spacer(12f),
             Ui.Heading(title) with { Key = "person-results-header" },
-            Ui.Scroll(Ui.Column(response.People.Select(BuildPersonResultCard).ToArray()),
+            Ui.Scroll(Ui.Column(response.People
+                .OrderByDescending(person => MapMarkTracker.MarkedKey == "person:" + person.CharacterId)
+                .Select(BuildPersonResultCard).ToArray()),
                 new TaiwuScrollOptions { Height = 590f, ShowBackground = true })) with
             {
                 Key = "person-results",
@@ -1211,6 +1317,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private void InteractWithCharacter(int characterId)
     {
+        // The conversation may change favorability and item holdings; drop
+        // cached query results when the window is reopened.
+        _characterInteractionPending = true;
         Close();
         TaiwuEventDomainMethod.Call.OnCharacterClicked(characterId);
     }
@@ -1308,7 +1417,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         if (!response.Success)
             return Ui.Muted(response.Message) with { Key = "merchant-error" };
-        _merchantTable.SetItems(response.Rows);
+        _merchantTable.SetItems(response.Rows
+            .OrderByDescending(row => MapMarkTracker.MarkedKey == MerchantMarkKey(row)));
         var columns = new[]
         {
             new TaiwuTableColumn<MerchantRowView>("name", "名称", row => row.Name, 400f, true, row => row.Name),
@@ -1342,6 +1452,9 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private static string MerchantMarkKey(MerchantRowView row) =>
         $"merchant:{row.TargetType}:{row.EntityId}";
+
+    private static string RenxiaMarkKey(RenxiaRowView row) =>
+        $"renxia:{row.TemplateId}@{row.AreaId}:{row.BlockId}";
 
     private void MarkMerchantLocation(MerchantRowView row)
     {
@@ -1396,7 +1509,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         if (!response.Success)
             return Ui.Muted(response.Message) with { Key = "renxia-error" };
-        _renxiaTable.SetItems(response.Rows);
+        _renxiaTable.SetItems(response.Rows
+            .OrderByDescending(row => MapMarkTracker.MarkedKey == RenxiaMarkKey(row)));
         RenxiaRowView? selected = Selected(_renxiaTable);
         var columns = new[]
         {
@@ -1428,7 +1542,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         };
         if (CanMarkArea(row.AreaId) && row.BlockId >= 0)
         {
-            string markKey = $"renxia:{row.TemplateId}@{row.AreaId}:{row.BlockId}";
+            string markKey = RenxiaMarkKey(row);
             rows.Add(Ui.Spacer(8f));
             rows.Add(Ui.Row(
                 Ui.Button(MarkButtonLabel(markKey), () => MarkRenxiaLocation(row, markKey),
@@ -1612,7 +1726,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _combatSearchCacheValid = true;
         _combatAreaHoldings = AreaSearchPlan.OrderByResultCount(
             results, area => area.Holdings.Holders.Count, area => area.AreaId);
-        _combatAreaTabs.Replace(_combatAreaHoldings.Take(1).Select(area => area.AreaId), notify: false);
+        _combatAreaTabs.Replace(DefaultAreaSelection(_combatAreaHoldings, area => area.AreaId), notify: false);
         _holderSetRenderLimit = HolderSetRenderPageSize;
         ClearStatus();
         RefreshActivePage();
@@ -1620,7 +1734,11 @@ internal sealed class SkillFinderWindow : MonoBehaviour
 
     private CombatAreaHoldings CreateCombatAreaHoldings(short areaId, BookHoldingsResponse holdings)
     {
-        var area = new CombatAreaHoldings(areaId, holdings);
+        var area = new CombatAreaHoldings(areaId, holdings, () =>
+        {
+            _holderSetRenderLimit = HolderSetRenderPageSize;
+            RefreshActivePage();
+        });
         ApplyCombatHoldingDefaults(area);
         return area;
     }
@@ -1633,8 +1751,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             // 正/逆（总纲为任意总纲类型）都已读或已有完整页的书页无需寻访，默认"不限"。
             if (TaiwuPageMarking.IsPageFullyCoveredByTaiwu(_combatTaiwuKnowledge, page))
             {
-                area.Types[page] = AnyPageTarget.Type;
-                area.States[page] = AnyPageTarget.State;
+                area.PageTargets[page].Replace(Array.Empty<PageTargetChoice>(), notify: false);
                 continue;
             }
             BookPageAvailability? preferred = BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true)
@@ -1646,8 +1763,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             preferred ??= BookHoldingWorkspace.GetPageAvailability(holders, page, combat: true).FirstOrDefault();
             if (preferred != null)
             {
-                area.Types[page] = preferred.Target.Type;
-                area.States[page] = preferred.Target.State;
+                area.PageTargets[page].Replace(new[] { preferred.Target }, notify: false);
             }
         }
     }
@@ -1759,7 +1875,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _lifeSearchCacheValid = true;
         _lifeAreaHoldings = AreaSearchPlan.OrderByResultCount(
             results, area => area.Holdings.Holders.Count, area => area.AreaId);
-        _lifeAreaTabs.Replace(_lifeAreaHoldings.Take(1).Select(area => area.AreaId), notify: false);
+        _lifeAreaTabs.Replace(DefaultAreaSelection(_lifeAreaHoldings, area => area.AreaId), notify: false);
         _holderSetRenderLimit = HolderSetRenderPageSize;
         ClearStatus();
         RefreshActivePage();
@@ -2031,7 +2147,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _personSearchCacheValid = true;
         _personAreaResults = AreaSearchPlan.OrderByResultCount(
             results, area => area.Response.TotalCount, area => area.AreaId);
-        _personAreaTabs.Replace(_personAreaResults.Take(1).Select(area => area.AreaId), notify: false);
+        _personAreaTabs.Replace(DefaultAreaSelection(_personAreaResults, area => area.AreaId), notify: false);
         ClearStatus();
         _personResultsContent.SetValue(BuildPersonResults());
     }
@@ -2141,7 +2257,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _merchantSearchCacheValid = true;
         _merchantAreaResults = AreaSearchPlan.OrderByResultCount(
             results, area => area.Response.TotalCount, area => area.AreaId);
-        _merchantAreaTabs.Replace(_merchantAreaResults.Take(1).Select(area => area.AreaId), notify: false);
+        _merchantAreaTabs.Replace(DefaultAreaSelection(_merchantAreaResults, area => area.AreaId), notify: false);
         ClearStatus();
         _merchantResultsContent.SetValue(BuildMerchantResults());
     }
@@ -2251,7 +2367,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _renxiaSearchCacheValid = true;
         _renxiaAreaResults = AreaSearchPlan.OrderByResultCount(
             results, area => area.Response.TotalCount, area => area.AreaId);
-        _renxiaAreaTabs.Replace(_renxiaAreaResults.Take(1).Select(area => area.AreaId), notify: false);
+        _renxiaAreaTabs.Replace(DefaultAreaSelection(_renxiaAreaResults, area => area.AreaId), notify: false);
         ClearStatus();
         _renxiaResultsContent.SetValue(BuildRenxiaResults());
     }
@@ -2287,6 +2403,36 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         _renxiaGrades.Clear();
         ClearRenxiaResults();
         RefreshActivePage();
+    }
+
+    // Reopening the window surfaces the marked entry: its area sheet becomes
+    // the selected one whenever that area is present in the cached results.
+    private void SyncAreaTabsWithMarks()
+    {
+        short? markedAreaId = MapMarkTracker.MarkedAreaId;
+        if (!markedAreaId.HasValue) return;
+        SelectMarkedAreaTab(_combatAreaTabs, _combatAreaHoldings.Select(area => area.AreaId), markedAreaId.Value);
+        SelectMarkedAreaTab(_lifeAreaTabs, _lifeAreaHoldings.Select(area => area.AreaId), markedAreaId.Value);
+        SelectMarkedAreaTab(_personAreaTabs, _personAreaResults.Select(area => area.AreaId), markedAreaId.Value);
+        SelectMarkedAreaTab(_merchantAreaTabs, _merchantAreaResults.Select(area => area.AreaId), markedAreaId.Value);
+        SelectMarkedAreaTab(_renxiaAreaTabs, _renxiaAreaResults.Select(area => area.AreaId), markedAreaId.Value);
+    }
+
+    private static void SelectMarkedAreaTab(
+        TaiwuSelection<short> tabs, IEnumerable<short> areaIds, short markedAreaId)
+    {
+        if (areaIds.Contains(markedAreaId))
+            tabs.Replace(new[] { markedAreaId }, notify: false);
+    }
+
+    // Default sheet after a search: the marked area when present, otherwise the
+    // first (highest-result) area.
+    private IReadOnlyList<short> DefaultAreaSelection<T>(IReadOnlyList<T> results, Func<T, short> areaId)
+    {
+        short? markedAreaId = MapMarkTracker.MarkedAreaId;
+        if (markedAreaId.HasValue && results.Any(result => areaId(result) == markedAreaId.Value))
+            return new[] { markedAreaId.Value };
+        return results.Take(1).Select(areaId).ToArray();
     }
 
     private void SelectArea(short areaId, bool markStale = true, bool refresh = true)

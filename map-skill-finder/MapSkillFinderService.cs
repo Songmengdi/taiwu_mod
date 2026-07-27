@@ -173,6 +173,16 @@ internal sealed record RenxiaSearchResult(
 
 internal static class MapSkillFinderService
 {
+    // GameData stores no relation as Int16.MinValue. In that case the private
+    // game method returns the deterministic favorability for their first meeting.
+    private static readonly MethodInfo CalcInitialFavorabilityMethod =
+        typeof(CharacterDomain).GetMethod("CalcInitialFavorability",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMethodException(typeof(CharacterDomain).FullName,
+            "CalcInitialFavorability");
+
+    private readonly record struct HolderFavorability(short Value, bool IsInitial);
+
     // CharacterDisplayData is comparatively expensive to build and serialize, while
     // book searches routinely encounter dozens of the same holders. Keep the encoded
     // immutable snapshot for the current game month so repeated queries do not pay
@@ -349,10 +359,12 @@ internal static class MapSkillFinderService
             OrganizationInfo organization = character.GetOrganizationInfo();
             OrganizationItem? organizationConfig = organization.GetOrganizationConfig();
             Location location = character.GetLocation();
+            HolderFavorability favorability = ResolveTaiwuFavorability(context, character);
             holders.Add(new BookHolderCandidate(
                 character.GetId(), ResolveName(character), location.AreaId, location.BlockId,
                 organizationConfig?.Name ?? "无所属", organization.Grade, books,
-                ResolvePosition(organization), string.Empty));
+                ResolvePosition(organization), string.Empty,
+                favorability.Value, favorability.IsInitial));
         }
         stopwatch.Stop();
         IReadOnlyList<BookCopyCandidate> taiwuBooks =
@@ -757,6 +769,21 @@ internal static class MapSkillFinderService
         var characters = new List<TaiwuCharacter>();
         MapCharacterFilter.Find(_ => true, characters, areaId, includeInfected: false);
         return characters;
+    }
+
+    private static HolderFavorability ResolveTaiwuFavorability(
+        DataContext context,
+        TaiwuCharacter holder)
+    {
+        int holderId = holder.GetId();
+        int taiwuId = DomainManager.Taiwu.GetTaiwuCharId();
+        short current = DomainManager.Character.GetFavorability(holderId, taiwuId);
+        if (current != short.MinValue)
+            return new HolderFavorability(current, IsInitial: false);
+
+        short initial = (short)CalcInitialFavorabilityMethod.Invoke(
+            DomainManager.Character, new object?[] { context.Random, holderId, taiwuId })!;
+        return new HolderFavorability(initial, IsInitial: true);
     }
 
     private static bool IsEligibleCharacter(TaiwuCharacter character)

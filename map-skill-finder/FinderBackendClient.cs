@@ -40,7 +40,8 @@ internal sealed record BookSearchResponse(
 internal sealed record BookHolderView(
     int CharacterId, string Name, short AreaId, short BlockId,
     string Organization, sbyte Grade, IReadOnlyList<BookCopyView> Books,
-    string Position = "", string AvatarData = "");
+    string Position = "", string AvatarData = "",
+    short Favorability = 0, bool FavorabilityIsInitial = false);
 
 internal sealed record BookHoldingsResponse(
     bool Success, string Message, string BookName, int ElapsedMs,
@@ -283,7 +284,9 @@ internal static class FinderBackendClient
                 Get(data, prefix + "CharacterId", -1), Get(data, prefix + "Name", string.Empty),
                 checked((short)Get(data, prefix + "AreaId", -1)), checked((short)Get(data, prefix + "BlockId", -1)),
                 Get(data, prefix + "Organization", string.Empty), checked((sbyte)Get(data, prefix + "Grade", 0)), books,
-                Get(data, prefix + "Position", string.Empty), Get(data, prefix + "AvatarData", string.Empty)));
+                Get(data, prefix + "Position", string.Empty), Get(data, prefix + "AvatarData", string.Empty),
+                checked((short)Get(data, prefix + "Favorability", 0)),
+                Get(data, prefix + "FavorabilityIsInitial", false)));
         }
         int taiwuBookCount = Get(data, "TaiwuBookCount", 0);
         var taiwuBooks = new List<BookCopyView>(taiwuBookCount);

@@ -54,7 +54,7 @@ internal static class FinderModMethods
             // Frontend features are introduced independently from the long-lived backend process.
             // A missing value in an older backend is read as 0 by the client, so it can ask for a restart
             // before attempting an unregistered method.
-            response.Set("ApiVersion", 5);
+            response.Set("ApiVersion", 6);
             response.Set("CurrentAreaId", (int)catalog.CurrentAreaId);
             response.Set("DateTick", catalog.DateTick);
             response.Set("AreaCount", catalog.Areas.Count);
@@ -200,6 +200,8 @@ internal static class FinderModMethods
         response.Set(prefix + "Grade", (int)holder.Grade);
         response.Set(prefix + "Position", holder.Position);
         response.Set(prefix + "AvatarData", holder.AvatarData);
+        response.Set(prefix + "Favorability", (int)holder.Favorability);
+        response.Set(prefix + "FavorabilityIsInitial", holder.FavorabilityIsInitial);
         response.Set(prefix + "BookCount", holder.Books.Count);
         for (int k = 0; k < holder.Books.Count; k++)
         {

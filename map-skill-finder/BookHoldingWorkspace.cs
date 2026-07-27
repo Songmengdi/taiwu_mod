@@ -50,6 +50,15 @@ internal static class BookHoldingWorkspace
     internal static IReadOnlyList<BookHolderSet> FindHolderSets(
         IReadOnlyList<BookHolderView> source,
         IReadOnlyList<PageTargetChoice> targets,
+        bool combat) =>
+        FindHolderSets(source, targets.Select(target =>
+            target.State < 0
+                ? (IReadOnlyCollection<PageTargetChoice>)Array.Empty<PageTargetChoice>()
+                : new[] { target }).ToArray(), combat);
+
+    internal static IReadOnlyList<BookHolderSet> FindHolderSets(
+        IReadOnlyList<BookHolderView> source,
+        IReadOnlyList<IReadOnlyCollection<PageTargetChoice>> targets,
         bool combat)
     {
         if (targets.Count != PageCount(combat))
@@ -105,13 +114,14 @@ internal static class BookHoldingWorkspace
 
     private static ulong Coverage(
         BookHolderView holder,
-        IReadOnlyList<PageTargetChoice> targets,
+        IReadOnlyList<IReadOnlyCollection<PageTargetChoice>> targets,
         bool combat)
     {
         ulong coverage = 0;
         for (int page = 0; page < targets.Count; page++)
         {
-            if (holder.Books.Any(book => Matches(book, page, targets[page], combat)))
+            if (holder.Books.Any(book => PageTargetFilter.Matches(
+                    ReadTarget(book, page, combat), targets[page])))
                 coverage |= 1UL << page;
         }
         return coverage;

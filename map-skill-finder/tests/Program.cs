@@ -75,6 +75,22 @@ Equal(2, multipleCopies.Combinations[0].BookCount, "both required copies are sel
 
 Console.WriteLine("MapSkillFinder domain contracts passed.");
 
+// ---- Page target multi-selection: selected variants are OR'd per page ----
+
+var positiveComplete = new PageTargetChoice(0, 0);
+var positiveIncomplete = new PageTargetChoice(0, 1);
+var reverseComplete = new PageTargetChoice(1, 0);
+var positiveTargets = new[] { positiveComplete, positiveIncomplete };
+Equal(true, PageTargetFilter.Matches(positiveComplete, positiveTargets),
+    "multi-select accepts 正完");
+Equal(true, PageTargetFilter.Matches(positiveIncomplete, positiveTargets),
+    "multi-select accepts 正残");
+Equal(false, PageTargetFilter.Matches(reverseComplete, positiveTargets),
+    "multi-select excludes an unselected variant");
+Equal(true, PageTargetFilter.Matches(reverseComplete, Array.Empty<PageTargetChoice>()),
+    "an empty page selection remains unrestricted");
+Console.WriteLine("Page target multi-selection contracts passed.");
+
 // ---- Area search: local first, fallback results ordered by count ----
 
 Equal(true, AreaSearchPlan.ShouldLoadCatalog(hasCatalog: false),

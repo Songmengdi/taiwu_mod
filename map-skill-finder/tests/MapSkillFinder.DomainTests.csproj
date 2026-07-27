@@ -11,5 +11,6 @@
     <Compile Include="..\BookCombinationSolver.cs" Link="BookCombinationSolver.cs" />
     <Compile Include="..\AreaSearchPlan.cs" Link="AreaSearchPlan.cs" />
     <Compile Include="..\TaiwuPageMarking.cs" Link="TaiwuPageMarking.cs" />
+    <Compile Include="..\PageTargetFilter.cs" Link="PageTargetFilter.cs" />
   </ItemGroup>
 </Project>

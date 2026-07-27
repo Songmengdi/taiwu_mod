@@ -4,6 +4,7 @@ using Game.Views.Bottom;
 using GameData.Domains.Character;
 using GameData.Domains.Item;
 using GameData.Domains.Map;
+using GameData.Domains.TaiwuEvent;
 using TaiwuUi;
 using UnityEngine;
 
@@ -153,8 +154,13 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private TaiwuBookKnowledge _combatTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     private TaiwuBookKnowledge _lifeTaiwuKnowledge = TaiwuBookKnowledge.Empty;
     // Holder sets mount in pages of this size to bound the live UI object count.
-    private const int HolderSetRenderPageSize = 30;
+    // A native character card contains a full avatar hierarchy. Keep the initial
+    // synchronous mount small; more sets remain available through the existing pager.
+    private const int HolderSetRenderPageSize = 8;
     private int _holderSetRenderLimit = HolderSetRenderPageSize;
+    private readonly Dictionary<int, string> _characterDisplays = new();
+    private readonly HashSet<int> _pendingCharacterDisplays = new();
+    private bool _characterDisplaysInFlight;
 
     private readonly TaiwuValue<string> _personName = new(string.Empty);
     private readonly TaiwuSelection<sbyte> _personGrades = new(TaiwuSelectionMode.Multiple);
@@ -179,7 +185,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private const float PersonSearchDebounceSeconds = 0.6f;
     // While the window is open the catalog is re-polled at this interval so a
     // month advance (which changes NPC holdings/abilities) drops cached results.
-    private const float WorldCheckIntervalSeconds = 3f;
+    private const float WorldCheckIntervalSeconds = 15f;
 
     private readonly TaiwuSelection<sbyte> _merchantTargets =
         new(TaiwuSelectionMode.Multiple, new sbyte[] { 0 });
@@ -306,15 +312,26 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         EnsureBookCatalog();
         _activeTab = _mainTab.Selected.Count == 0 ? (sbyte)0 : _mainTab.Selected.First();
-        for (int index = 0; index < _tabContent.Length; index++)
-            _tabContent[index].SetValueWithoutNotify(Ui.Spacer());
-        SetStatus("正在读取地域目录……");
-        _tabContent[_activeTab].SetValueWithoutNotify(BuildActiveTabPage());
         if (_window == null)
+        {
+            for (int index = 0; index < _tabContent.Length; index++)
+                _tabContent[index].SetValueWithoutNotify(Ui.Spacer());
+            if (AreaSearchPlan.ShouldLoadCatalog(_catalog != null))
+                SetStatus("正在读取地域目录……");
+            else
+                ClearStatus();
+            _tabContent[_activeTab].SetValueWithoutNotify(BuildActiveTabPage());
             Render();
+        }
         _window!.Show();
         _nextWorldCheckAt = Time.unscaledTime + WorldCheckIntervalSeconds;
         int version = ++_requestVersion;
+        if (_catalog != null)
+        {
+            RequestWorldStamp(version);
+            StartMissingActiveSearch();
+            return;
+        }
         FinderBackendClient.GetCatalog(catalog =>
         {
             if (!Accept(version)) return;
@@ -323,33 +340,32 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 SetStatus(catalog.Message);
                 return;
             }
-            // Switching to the current area or a month advance since the cached
-            // queries ran makes them stale; drop them so the page re-queries.
-            bool areaChanged = _selectedAreaId >= 0 && _selectedAreaId != catalog.CurrentAreaId;
-            bool dateChanged = _catalogDateTick > 0 && catalog.DateTick > 0
-                && catalog.DateTick != _catalogDateTick;
             _catalog = catalog;
             if (catalog.DateTick > 0) _catalogDateTick = catalog.DateTick;
-            if (areaChanged || dateChanged) MarkAllStale();
             SelectArea(catalog.CurrentAreaId, markStale: false, refresh: false);
             ClearStatus();
             RefreshActivePage();
-            if (_activeTab == 0 && AreaSearchPlan.ShouldStartAfterCatalog(
-                _combatSkill >= 0, _combatSearchCacheValid, _combatSearchInFlight))
-                StartCombatSearch();
-            if (_activeTab == 1 && AreaSearchPlan.ShouldStartAfterCatalog(
-                _lifeSkill >= 0, _lifeSearchCacheValid, _lifeSearchInFlight))
-                StartLifeSearch();
-            if (_activeTab == 2 && AreaSearchPlan.ShouldStartAfterCatalog(
-                HasPersonFilter, _personSearchCacheValid, _personSearchInFlight))
-                SchedulePersonSearch();
-            if (_activeTab == 3 && AreaSearchPlan.ShouldStartAfterCatalog(
-                true, _merchantSearchCacheValid, _merchantSearchInFlight))
-                ScheduleMerchantSearch();
-            if (_activeTab == 4 && AreaSearchPlan.ShouldStartAfterCatalog(
-                HasRenxiaFilter, _renxiaSearchCacheValid, _renxiaSearchInFlight))
-                ScheduleRenxiaSearch();
+            StartMissingActiveSearch();
         });
+    }
+
+    private void StartMissingActiveSearch()
+    {
+        if (_activeTab == 0 && AreaSearchPlan.ShouldStartAfterCatalog(
+            _combatSkill >= 0, _combatSearchCacheValid, _combatSearchInFlight))
+            StartCombatSearch();
+        if (_activeTab == 1 && AreaSearchPlan.ShouldStartAfterCatalog(
+            _lifeSkill >= 0, _lifeSearchCacheValid, _lifeSearchInFlight))
+            StartLifeSearch();
+        if (_activeTab == 2 && AreaSearchPlan.ShouldStartAfterCatalog(
+            HasPersonFilter, _personSearchCacheValid, _personSearchInFlight))
+            SchedulePersonSearch();
+        if (_activeTab == 3 && AreaSearchPlan.ShouldStartAfterCatalog(
+            true, _merchantSearchCacheValid, _merchantSearchInFlight))
+            ScheduleMerchantSearch();
+        if (_activeTab == 4 && AreaSearchPlan.ShouldStartAfterCatalog(
+            HasRenxiaFilter, _renxiaSearchCacheValid, _renxiaSearchInFlight))
+            ScheduleRenxiaSearch();
     }
 
     internal void Close()
@@ -384,7 +400,8 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             tabs,
             title: "寻访中心", width: 1920f, height: 1080f,
             layer: TaiwuWindowLayer.Popup, cover: TaiwuWindowCover.Full,
-            presentation: TaiwuWindowPresentation.Encyclopedia);
+            presentation: TaiwuWindowPresentation.Encyclopedia,
+            lifetime: TaiwuWindowLifetime.KeepAlive);
     }
 
     private UiElement BuildTabPage(UiElement content, string key, bool showRegionSelector = true)
@@ -942,9 +959,15 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     private UiElement BuildHolderSetRow(BookHolderSet set, string key, short areaId)
     {
         UiElement summary = Ui.Column(
-            Ui.Text(string.Join("、", set.Holders.Select(holder => holder.Name))),
-            Ui.Muted(string.Join(" · ", set.Holders.Select(holder =>
-                $"{holder.Organization}／地格 {holder.BlockId}"))),
+            Ui.Row(set.Holders.Select(holder => Ui.Column(
+                BuildCharacterCard(holder.CharacterId, holder.Name, holder.Position, holder.Grade,
+                    holder.AvatarData, holder.AreaId, holder.BlockId),
+                NativeCharacterCard.IsAtTaiwuLocation(holder.AreaId, holder.BlockId)
+                    ? Ui.Text($"可交互 · 地格 {holder.BlockId}")
+                    : Ui.Muted($"仅查看 · 地格 {holder.BlockId}")) with
+                {
+                    Key = "holder-" + holder.CharacterId,
+                }).ToArray()),
             Ui.Spacer(6f),
             Ui.Divider());
 
@@ -1124,27 +1147,6 @@ internal sealed class SkillFinderWindow : MonoBehaviour
     {
         if (!response.Success)
             return Ui.Muted(response.Message) with { Key = "person-error" };
-        _personTable.SetItems(response.People);
-        PersonRowView? selected = Selected(_personTable);
-        var columns = new List<TaiwuTableColumn<PersonRowView>>
-        {
-            new("name", "姓名", row => row.Name, 260f, true, row => row.Name),
-            new("grade", "品级", row => GradeName(row.Grade), 150f, true, row => row.Grade),
-            new("organization", "组织", row => row.Organization, 250f, true, row => row.Organization),
-            new("age", "年龄", row => row.Age.ToString(), 120f, true, row => row.Age),
-        };
-        foreach (AbilityFilterState filter in _abilityFilters.Where(item => item.Enabled.Value))
-        {
-            sbyte type = filter.LifeSkillType;
-            sbyte metric = filter.Metric;
-            string header = (Config.LifeSkillType.Instance.GetItem(type)?.Name ?? $"技艺{type}") +
-                (metric == 0 ? "资质" : "造诣");
-            columns.Add(new TaiwuTableColumn<PersonRowView>($"ability-{type}-{metric}", header,
-                row => AbilityDisplay(row.Abilities.FirstOrDefault(value =>
-                    value.LifeSkillType == type && value.Metric == metric)),
-                190f, true, row => row.Abilities.FirstOrDefault(value =>
-                    value.LifeSkillType == type && value.Metric == metric)?.Total ?? -1));
-        }
         string title = response.People.Count < response.TotalCount
             ? $"人物结果 · 已加载 {response.People.Count}/{response.TotalCount} 人"
             : $"人物结果 · {response.TotalCount} 人 · {response.ElapsedMs} ms";
@@ -1159,10 +1161,58 @@ internal sealed class SkillFinderWindow : MonoBehaviour
                 SearchPeople, () => SearchPeople(forceFullMap: true), loadMore),
             Ui.Spacer(12f),
             Ui.Heading(title) with { Key = "person-results-header" },
-            Ui.Row(
-                Ui.Flex(Ui.Table(_personTable, columns,
-                    new TaiwuTableOptions { Height = 590f, RowHeight = 70f }), 2f),
-                Ui.Flex(BuildPersonDetail(selected), 1f))) with { Key = "person-results" };
+            Ui.Scroll(Ui.Column(response.People.Select(BuildPersonResultCard).ToArray()),
+                new TaiwuScrollOptions { Height = 590f, ShowBackground = true })) with
+            {
+                Key = "person-results",
+            };
+    }
+
+    private UiElement BuildPersonResultCard(PersonRowView person)
+    {
+        var details = new List<UiElement>
+        {
+            NativeCharacterCard.IsAtTaiwuLocation(person.AreaId, person.BlockId)
+                ? Ui.Text($"可交互 · {GradeName(person.Grade)} · {person.Age} 岁 · 地格 {person.BlockId}")
+                : Ui.Muted($"仅查看 · {GradeName(person.Grade)} · {person.Age} 岁 · 地格 {person.BlockId}"),
+        };
+        details.AddRange(person.Abilities.Select(ability => Ui.Muted(AbilityDisplay(ability))));
+        if (CanMarkArea(person.AreaId) && person.BlockId >= 0)
+        {
+            string markKey = "person:" + person.CharacterId;
+            details.Add(Ui.Button(MarkButtonLabel(markKey), () => MarkPersonLocation(person, markKey),
+                new TaiwuButtonOptions { Width = 180f, Style = TaiwuButtonStyle.Outlined }));
+        }
+        return Ui.Row(
+            BuildCharacterCard(person.CharacterId, person.Name, person.Position, person.Grade,
+                person.AvatarData, person.AreaId, person.BlockId),
+            Ui.Flex(Ui.Column(details.ToArray()))) with { Key = "person-card-" + person.CharacterId };
+    }
+
+    private UiElement BuildCharacterCard(
+        int characterId, string name, string position, sbyte grade, string avatarData,
+        short areaId, short blockId)
+    {
+        if (string.IsNullOrEmpty(avatarData) &&
+            _characterDisplays.TryGetValue(characterId, out string? cached))
+            avatarData = cached;
+        if (string.IsNullOrEmpty(avatarData))
+        {
+            if (_catalog?.ApiVersion >= 5)
+                _pendingCharacterDisplays.Add(characterId);
+            return Ui.NativeHost(320f, 102f, NativeCharacterCard.CreatePlaceholder,
+                NativeCharacterCard.ReleasePlaceholder);
+        }
+        string display = avatarData;
+        return Ui.NativeHost(320f, 102f, () => NativeCharacterCard.Create(
+                characterId, name, position, grade, display, areaId, blockId, InteractWithCharacter),
+            NativeCharacterCard.Release, deferred: true);
+    }
+
+    private void InteractWithCharacter(int characterId)
+    {
+        Close();
+        TaiwuEventDomainMethod.Call.OnCharacterClicked(characterId);
     }
 
     private UiElement BuildPersonDetail(PersonRowView? person)
@@ -1753,6 +1803,7 @@ internal sealed class SkillFinderWindow : MonoBehaviour
             _renxiaSearchAt = -1f;
             return;
         }
+        RequestPendingCharacterDisplays();
         CheckWorldChanges();
         if (_personSearchAt >= 0f)
         {
@@ -1810,24 +1861,65 @@ internal sealed class SkillFinderWindow : MonoBehaviour
         if (Time.unscaledTime < _nextWorldCheckAt) return;
         _nextWorldCheckAt = Time.unscaledTime + WorldCheckIntervalSeconds;
         _worldCheckInFlight = true;
-        int version = _requestVersion;
-        FinderBackendClient.GetCatalog(catalog =>
+        RequestWorldStamp(_requestVersion);
+    }
+
+    private void RequestPendingCharacterDisplays()
+    {
+        if (_characterDisplaysInFlight || _pendingCharacterDisplays.Count == 0) return;
+        int[] requested = _pendingCharacterDisplays.Take(64).ToArray();
+        foreach (int characterId in requested)
+            _pendingCharacterDisplays.Remove(characterId);
+        _characterDisplaysInFlight = true;
+        FinderBackendClient.GetCharacterDisplays(requested, response =>
         {
-            _worldCheckInFlight = false;
-            if (!Accept(version) || !catalog.Success) return;
-            bool dateChanged = _catalogDateTick > 0 && catalog.DateTick > 0
-                && catalog.DateTick != _catalogDateTick;
-            _catalog = catalog;
-            if (catalog.DateTick > 0) _catalogDateTick = catalog.DateTick;
-            if (!dateChanged) return;
-            MarkAllStale();
-            RefreshActivePage();
-            if (_activeTab == 0 && _combatSkill >= 0) StartCombatSearch();
-            if (_activeTab == 1 && _lifeSkill >= 0) StartLifeSearch();
-            if (_activeTab == 2 && HasPersonFilter) SchedulePersonSearch();
-            if (_activeTab == 3) ScheduleMerchantSearch();
-            if (_activeTab == 4 && HasRenxiaFilter) ScheduleRenxiaSearch();
+            _characterDisplaysInFlight = false;
+            if (_window?.IsShowing != true) return;
+            if (response.Success)
+            {
+                foreach (KeyValuePair<int, string> item in response.Displays)
+                    if (!string.IsNullOrEmpty(item.Value))
+                        _characterDisplays[item.Key] = item.Value;
+                RefreshActivePage();
+            }
         });
+    }
+
+    private void RequestWorldStamp(int version)
+    {
+        _worldCheckInFlight = true;
+        if (_catalog?.ApiVersion >= 4)
+        {
+            FinderBackendClient.GetWorldStamp(stamp => ApplyWorldStamp(version, stamp));
+            return;
+        }
+
+        // Compatibility with a backend loaded before API v4.
+        FinderBackendClient.GetCatalog(catalog => ApplyWorldStamp(version,
+            new FinderWorldStampView(catalog.Success, catalog.Message,
+                catalog.CurrentAreaId, catalog.DateTick)));
+    }
+
+    private void ApplyWorldStamp(int version, FinderWorldStampView stamp)
+    {
+        _worldCheckInFlight = false;
+        if (!Accept(version) || !stamp.Success || _catalog == null) return;
+        bool areaChanged = stamp.CurrentAreaId != _catalog.CurrentAreaId;
+        bool dateChanged = AreaSearchPlan.HasDateChanged(_catalogDateTick, stamp.DateTick);
+        _catalog = _catalog with { CurrentAreaId = stamp.CurrentAreaId };
+        if (stamp.DateTick > 0) _catalogDateTick = stamp.DateTick;
+        if (areaChanged)
+            SelectArea(stamp.CurrentAreaId, markStale: false, refresh: false);
+        if (!dateChanged)
+        {
+            // Area movement changes only marking/clickability, not cached search data.
+            if (areaChanged) RefreshActivePage();
+            return;
+        }
+        _characterDisplays.Clear();
+        MarkAllStale();
+        RefreshActivePage();
+        StartMissingActiveSearch();
     }
 
     private void ScheduleMerchantSearch() =>

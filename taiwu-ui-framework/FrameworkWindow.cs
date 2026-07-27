@@ -7,6 +7,8 @@ namespace TaiwuUi;
 
 internal sealed class FrameworkWindow : ITaiwuWindow
 {
+    static FrameworkWindow() => FrameworkLifetimePatches.EnsurePatched();
+
     private static readonly AccessTools.FieldRef<UIElement, string> ElementPath =
         AccessTools.FieldRefAccess<UIElement, string>("_path");
 
@@ -33,6 +35,7 @@ internal sealed class FrameworkWindow : ITaiwuWindow
         string objectName = "TaiwuUi_" + Sanitize(_definition.OwnerId) + "_" + Sanitize(_definition.WindowId);
         var root = new GameObject(objectName, typeof(RectTransform), typeof(Canvas), typeof(CImage));
         FrameworkView view = root.AddComponent<FrameworkView>();
+        view.KeepAlive = _definition.Lifetime == TaiwuWindowLifetime.KeepAlive;
         // Native UIBase instances receive this array during the game's resource
         // preparation pipeline. Framework windows are mounted directly, so keep
         // the same lifecycle invariant ourselves. AtlasInfo.DoUnloadPackers
@@ -214,4 +217,21 @@ internal sealed class FrameworkWindow : ITaiwuWindow
         for (int i = 0; i < root.transform.childCount; i++)
             SetLayerRecursively(root.transform.GetChild(i).gameObject, layer);
     }
+}
+
+internal static class FrameworkLifetimePatches
+{
+    private static bool _patched;
+
+    internal static void EnsurePatched()
+    {
+        if (_patched) return;
+        _patched = true;
+        new Harmony("magian.taiwu-ui-framework.lifecycle").Patch(
+            AccessTools.Method(typeof(UIElement), nameof(UIElement.DestroyUIBase)),
+            prefix: new HarmonyMethod(typeof(FrameworkLifetimePatches), nameof(BeforeDestroyUiBase)));
+    }
+
+    private static bool BeforeDestroyUiBase(UIElement __instance) =>
+        __instance.UiBase is not FrameworkView { KeepAlive: true };
 }

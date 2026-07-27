@@ -7,6 +7,8 @@ namespace TaiwuUi;
 
 internal sealed class FrameworkView : UIBase
 {
+    internal bool KeepAlive { get; set; }
+
     private TaiwuTheme? _theme;
     private int _buttonSequence;
 
@@ -364,6 +366,18 @@ internal sealed class FrameworkView : UIBase
                 nativeImageView.raycastTarget = false;
                 break;
             }
+            case NativeHostNode nativeHost:
+            {
+                RectTransform host = CreateRect(
+                    "NativeHost", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(nativeHost.Width, nativeHost.Height));
+                UiFactory.Layout(host, nativeHost.Width, nativeHost.Height, flexibleWidth: 0f);
+                if (nativeHost.Deferred)
+                    DeferredNativeHostMount.Enqueue(host, nativeHost, KeepAlive);
+                else
+                    MountNativeContent(host, nativeHost, KeepAlive);
+                break;
+            }
             case DividerNode:
             {
                 RectTransform divider = CreateRect(
@@ -404,6 +418,24 @@ internal sealed class FrameworkView : UIBase
             }
         }
         TagCreatedRoot(parent, childCount, node);
+    }
+
+    internal static void MountNativeContent(
+        RectTransform host, NativeHostNode nativeHost, bool keepAlive)
+    {
+        if (host == null) return;
+        GameObject content = nativeHost.Factory()
+            ?? throw new InvalidOperationException("Native host factory returned null.");
+        content.transform.SetParent(host, false);
+        if (nativeHost.Release != null)
+            host.gameObject.AddComponent<NativeHostLease>()
+                .Configure(content, nativeHost.Release, releaseWhenDisabled: !keepAlive);
+        if (content.transform is not RectTransform contentRect) return;
+        contentRect.anchorMin = new Vector2(0f, 0.5f);
+        contentRect.anchorMax = new Vector2(0f, 0.5f);
+        contentRect.pivot = new Vector2(0f, 0.5f);
+        contentRect.anchoredPosition = Vector2.zero;
+        contentRect.sizeDelta = new Vector2(nativeHost.Width, nativeHost.Height);
     }
 
     private static void TagCreatedRoot(Transform parent, int previousChildCount, UiNode node)
@@ -737,6 +769,7 @@ internal sealed class FrameworkView : UIBase
         FlexNode flex => flex.Children.Sum(PreferredHeight),
         DynamicNode dynamic => dynamic.Height,
         NativeImageNode image => image.Height,
+        NativeHostNode host => host.Height,
         TabsNode tabs => tabs.Height,
         NavigationNode navigation => navigation.Options.Height,
         TableNode table => table.Options.Height,
@@ -775,5 +808,122 @@ internal sealed class FrameworkView : UIBase
         rect.anchorMax = anchorMax;
         rect.offsetMin = offsetMin;
         rect.offsetMax = offsetMax;
+    }
+}
+
+internal sealed class NativeHostLease : MonoBehaviour
+{
+    private GameObject? _content;
+    private Action<GameObject>? _release;
+    private bool _releaseWhenDisabled;
+
+    internal void Configure(GameObject content, Action<GameObject> release, bool releaseWhenDisabled)
+    {
+        NativeHostReleaseQueue.EnsureExists();
+        _content = content;
+        _release = release;
+        _releaseWhenDisabled = releaseWhenDisabled;
+    }
+
+    // Unity disables an active hierarchy before destroying it. Releasing here
+    // lets a consumer detach pooled native content before child destruction is
+    // scheduled; OnDestroy remains the fallback for an already-inactive host.
+    private void OnDisable()
+    {
+        if (_releaseWhenDisabled) ReleaseOnce();
+    }
+
+    private void OnDestroy()
+    {
+        if (_releaseWhenDisabled) ReleaseOnce();
+    }
+
+    private void ReleaseOnce()
+    {
+        if (_content == null || _release == null) return;
+        GameObject content = _content;
+        Action<GameObject> release = _release;
+        _content = null;
+        _release = null;
+        NativeHostReleaseQueue.Enqueue(() => release(content));
+    }
+}
+
+internal sealed class DeferredNativeHostMount : MonoBehaviour
+{
+    private sealed record PendingMount(RectTransform Host, NativeHostNode Node, bool KeepAlive);
+    private static readonly Queue<PendingMount> Pending = new();
+    private static DeferredNativeHostMount? _instance;
+
+    internal static void Enqueue(RectTransform host, NativeHostNode node, bool keepAlive)
+    {
+        EnsureExists();
+        Pending.Enqueue(new PendingMount(host, node, keepAlive));
+    }
+
+    private static void EnsureExists()
+    {
+        if (_instance != null) return;
+        var root = new GameObject("TaiwuUi_DeferredNativeHostMount");
+        DontDestroyOnLoad(root);
+        _instance = root.AddComponent<DeferredNativeHostMount>();
+    }
+
+    private void LateUpdate()
+    {
+        if (Pending.Count == 0) return;
+        PendingMount mount = Pending.Dequeue();
+        if (mount.Host == null) return;
+        if (!mount.Host.gameObject.activeInHierarchy)
+        {
+            Pending.Enqueue(mount);
+            return;
+        }
+        FrameworkView.MountNativeContent(mount.Host, mount.Node, mount.KeepAlive);
+    }
+
+    private void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+        Pending.Clear();
+    }
+}
+
+internal sealed class NativeHostReleaseQueue : MonoBehaviour
+{
+    private static readonly Queue<Action> Pending = new();
+    private static NativeHostReleaseQueue? _instance;
+
+    internal static void EnsureExists()
+    {
+        if (_instance != null) return;
+        var root = new GameObject("TaiwuUi_NativeHostReleaseQueue");
+        DontDestroyOnLoad(root);
+        _instance = root.AddComponent<NativeHostReleaseQueue>();
+    }
+
+    internal static void Enqueue(Action release)
+    {
+        EnsureExists();
+        Pending.Enqueue(release);
+    }
+
+    private void LateUpdate()
+    {
+        int count = Pending.Count;
+        for (int i = 0; i < count; i++)
+        {
+            try { Pending.Dequeue()(); }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+        Pending.Clear();
     }
 }

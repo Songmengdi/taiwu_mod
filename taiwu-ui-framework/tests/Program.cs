@@ -3,6 +3,8 @@ using TaiwuUi;
 Expect(TaiwuUiApi.ApiMajor, 2, "v2 API major");
 Expect(Enum.IsDefined(typeof(TaiwuButtonStyle), TaiwuButtonStyle.Outlined), true,
     "outlined button style is public");
+Expect(Enum.IsDefined(typeof(TaiwuWindowLifetime), TaiwuWindowLifetime.KeepAlive), true,
+    "keep-alive window lifetime is public");
 
 var search = new TaiwuValue<string>("seed");
 var checkbox = new TaiwuValue<bool>(true);
@@ -78,6 +80,7 @@ var columns = new[]
 };
 
 UiElement content = Ui.Column(
+    Ui.NativeHost(64f, 64f, () => new UnityEngine.GameObject("native-test")) with { Key = "native-host" },
     Ui.SearchInput(search, "输入姓名") with { Key = "search" },
     Ui.Row(
         Ui.Checkbox(checkbox, "显示隐藏地格") with { Key = "hidden" },

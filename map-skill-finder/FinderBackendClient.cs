@@ -8,6 +8,9 @@ internal sealed record AreaOptionView(short AreaId, string Name, sbyte Category,
 
 internal sealed record FinderCatalogView(bool Success, string Message, int ApiVersion, short CurrentAreaId,
     int DateTick, IReadOnlyList<AreaOptionView> Areas);
+internal sealed record FinderWorldStampView(bool Success, string Message, short CurrentAreaId, int DateTick);
+internal sealed record CharacterDisplayBatchView(bool Success, string Message,
+    IReadOnlyDictionary<int, string> Displays);
 
 internal sealed record PageRequirementView(sbyte State, sbyte Type);
 
@@ -23,7 +26,8 @@ internal sealed record BookCopyView(
 
 internal sealed record BookContributionView(
     int CharacterId, string Name, short AreaId, short BlockId,
-    string Organization, sbyte Grade, int Coverage, IReadOnlyList<BookCopyView> Books);
+    string Organization, sbyte Grade, int Coverage, IReadOnlyList<BookCopyView> Books,
+    string Position = "", string AvatarData = "");
 
 internal sealed record BookCombinationView(
     string Key, int BookCount, int PrivateCount, IReadOnlyList<BookContributionView> Contributions);
@@ -35,7 +39,8 @@ internal sealed record BookSearchResponse(
 
 internal sealed record BookHolderView(
     int CharacterId, string Name, short AreaId, short BlockId,
-    string Organization, sbyte Grade, IReadOnlyList<BookCopyView> Books);
+    string Organization, sbyte Grade, IReadOnlyList<BookCopyView> Books,
+    string Position = "", string AvatarData = "");
 
 internal sealed record BookHoldingsResponse(
     bool Success, string Message, string BookName, int ElapsedMs,
@@ -55,7 +60,7 @@ internal sealed record AbilityValueView(
 internal sealed record PersonRowView(
     int CharacterId, string Name, short AreaId, short BlockId, string Organization,
     sbyte OrganizationId, sbyte Grade, short Age, sbyte Gender,
-    IReadOnlyList<AbilityValueView> Abilities);
+    IReadOnlyList<AbilityValueView> Abilities, string Position = "", string AvatarData = "");
 
 internal sealed record PersonSearchResponse(
     bool Success, string Message, int TotalCount, int Page, int PageSize,
@@ -85,6 +90,8 @@ internal sealed record RenxiaSearchResponse(
 internal static class FinderBackendClient
 {
     private const string CatalogMethod = "TaiwuFinder.GetCatalog.v1";
+    private const string WorldStampMethod = "TaiwuFinder.GetWorldStamp.v1";
+    private const string CharacterDisplaysMethod = "TaiwuFinder.GetCharacterDisplays.v1";
     private const string BookMethod = "TaiwuFinder.SearchBooks.v1";
     private const string BookHoldingsMethod = "TaiwuFinder.GetBookHoldings.v1";
     private const string PersonMethod = "TaiwuFinder.SearchPeople.v1";
@@ -109,6 +116,30 @@ internal static class FinderBackendClient
                 // 0 = older backend without date support: month-invalidation is skipped.
                 Get(data, "DateTick", 0), areas));
         });
+
+    internal static void GetWorldStamp(Action<FinderWorldStampView> callback) =>
+        Call(WorldStampMethod, new SerializableModData(), data => callback(new FinderWorldStampView(
+            Get(data, "Success", false), Get(data, "Message", string.Empty),
+            checked((short)Get(data, "CurrentAreaId", -1)), Get(data, "DateTick", 0))));
+
+    internal static void GetCharacterDisplays(IReadOnlyList<int> characterIds,
+        Action<CharacterDisplayBatchView> callback)
+    {
+        var parameter = new SerializableModData();
+        parameter.Set("Count", characterIds.Count);
+        for (int i = 0; i < characterIds.Count; i++)
+            parameter.Set($"CharacterId{i}", characterIds[i]);
+        Call(CharacterDisplaysMethod, parameter, data =>
+        {
+            int count = Get(data, "Count", 0);
+            var displays = new Dictionary<int, string>(count);
+            for (int i = 0; i < count; i++)
+                displays[Get(data, $"CharacterId{i}", -1)] =
+                    Get(data, $"AvatarData{i}", string.Empty);
+            callback(new CharacterDisplayBatchView(
+                Get(data, "Success", false), Get(data, "Message", string.Empty), displays));
+        });
+    }
 
     internal static void SearchBooks(BookSearchRequestView request, Action<BookSearchResponse> callback)
     {
@@ -213,7 +244,9 @@ internal static class FinderBackendClient
                     checked((short)Get(data, prefix + "BlockId", -1)),
                     Get(data, prefix + "Organization", string.Empty),
                     checked((sbyte)Get(data, prefix + "Grade", 0)),
-                    Get(data, prefix + "Coverage", 0), books));
+                    Get(data, prefix + "Coverage", 0), books,
+                    Get(data, prefix + "Position", string.Empty),
+                    Get(data, prefix + "AvatarData", string.Empty)));
             }
             combinations.Add(new BookCombinationView(
                 Get(data, $"CombinationKey{i}", i.ToString()),
@@ -249,7 +282,8 @@ internal static class FinderBackendClient
             holders.Add(new BookHolderView(
                 Get(data, prefix + "CharacterId", -1), Get(data, prefix + "Name", string.Empty),
                 checked((short)Get(data, prefix + "AreaId", -1)), checked((short)Get(data, prefix + "BlockId", -1)),
-                Get(data, prefix + "Organization", string.Empty), checked((sbyte)Get(data, prefix + "Grade", 0)), books));
+                Get(data, prefix + "Organization", string.Empty), checked((sbyte)Get(data, prefix + "Grade", 0)), books,
+                Get(data, prefix + "Position", string.Empty), Get(data, prefix + "AvatarData", string.Empty)));
         }
         int taiwuBookCount = Get(data, "TaiwuBookCount", 0);
         var taiwuBooks = new List<BookCopyView>(taiwuBookCount);
@@ -294,7 +328,8 @@ internal static class FinderBackendClient
                 checked((short)Get(data, $"AreaId{i}", -1)), checked((short)Get(data, $"BlockId{i}", -1)),
                 Get(data, $"Organization{i}", string.Empty), checked((sbyte)Get(data, $"OrganizationId{i}", -1)),
                 checked((sbyte)Get(data, $"Grade{i}", 0)), checked((short)Get(data, $"Age{i}", 0)),
-                checked((sbyte)Get(data, $"Gender{i}", 0)), abilities));
+                checked((sbyte)Get(data, $"Gender{i}", 0)), abilities,
+                Get(data, $"Position{i}", string.Empty), Get(data, $"AvatarData{i}", string.Empty)));
         }
         return new PersonSearchResponse(
             Get(data, "Success", false), Get(data, "Message", string.Empty),

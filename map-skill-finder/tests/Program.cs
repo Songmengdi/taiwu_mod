@@ -77,6 +77,17 @@ Console.WriteLine("MapSkillFinder domain contracts passed.");
 
 // ---- Area search: local first, fallback results ordered by count ----
 
+Equal(true, AreaSearchPlan.ShouldLoadCatalog(hasCatalog: false),
+    "first open loads the area catalog");
+Equal(false, AreaSearchPlan.ShouldLoadCatalog(hasCatalog: true),
+    "reopen reuses the area catalog");
+Equal(false, AreaSearchPlan.HasDateChanged(100, 100),
+    "same date preserves query caches");
+Equal(true, AreaSearchPlan.HasDateChanged(100, 101),
+    "month advance invalidates query caches");
+Equal(false, AreaSearchPlan.HasDateChanged(0, 101),
+    "unknown old date does not cause a false invalidation");
+
 SequenceEqual(new short[] { 5, 1, 3 }, AreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 5 }, 5),
     "current area is searched before every other area");
 SequenceEqual(new short[] { 1, 3 }, AreaSearchPlan.BuildSearchOrder(new short[] { 1, 3, 1 }, 5),

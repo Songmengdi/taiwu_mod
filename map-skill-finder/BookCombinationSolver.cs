@@ -23,7 +23,9 @@ internal sealed record BookHolderCandidate(
     short BlockId,
     string Organization,
     sbyte Grade,
-    IReadOnlyList<BookCopyCandidate> Books)
+    IReadOnlyList<BookCopyCandidate> Books,
+    string Position = "",
+    string AvatarData = "")
 {
     internal ulong CoverageMask => Books.Aggregate(0UL, static (mask, book) => mask | book.CoverageMask);
 }

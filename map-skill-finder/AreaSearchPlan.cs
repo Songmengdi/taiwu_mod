@@ -3,6 +3,11 @@ namespace MapSkillFinder.Frontend;
 /// <summary>Pure ordering and cache rules for local-first map searches.</summary>
 internal static class AreaSearchPlan
 {
+    internal static bool ShouldLoadCatalog(bool hasCatalog) => !hasCatalog;
+
+    internal static bool HasDateChanged(int previousDateTick, int currentDateTick) =>
+        previousDateTick > 0 && currentDateTick > 0 && previousDateTick != currentDateTick;
+
     internal static IReadOnlyList<short> BuildSearchOrder(
         IEnumerable<short> areaIds,
         short currentAreaId)

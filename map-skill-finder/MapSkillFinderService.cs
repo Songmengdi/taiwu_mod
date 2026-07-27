@@ -40,6 +40,8 @@ internal enum PageMatchType : sbyte
 internal sealed record AreaOption(short AreaId, string Name, sbyte Category, sbyte StateId);
 
 internal sealed record FinderCatalog(short CurrentAreaId, IReadOnlyList<AreaOption> Areas, int DateTick);
+internal sealed record FinderWorldStamp(short CurrentAreaId, int DateTick);
+internal sealed record CharacterDisplayRow(int CharacterId, string AvatarData);
 
 internal sealed record PageRequirement(sbyte State, sbyte Type);
 
@@ -115,7 +117,9 @@ internal sealed record PersonSearchRow(
     sbyte Grade,
     short Age,
     sbyte Gender,
-    IReadOnlyList<AbilityValue> Abilities);
+    IReadOnlyList<AbilityValue> Abilities,
+    string Position,
+    string AvatarData);
 
 internal sealed record PersonSearchResult(
     int TotalCount,
@@ -169,13 +173,31 @@ internal sealed record RenxiaSearchResult(
 
 internal static class MapSkillFinderService
 {
+    // CharacterDisplayData is comparatively expensive to build and serialize, while
+    // book searches routinely encounter dozens of the same holders. Keep the encoded
+    // immutable snapshot for the current game month so repeated queries do not pay
+    // that cost again. The cap prevents full-map searches from retaining every NPC.
+    private const int CharacterDisplayCacheCapacity = 512;
+    private static readonly Dictionary<int, string> CharacterDisplayCache = new();
+    private static readonly Queue<int> CharacterDisplayCacheOrder = new();
+    private static int CharacterDisplayCacheDateTick = int.MinValue;
+
     private static readonly FieldInfo SoldLibraryBooksField =
         typeof(CharacterDomain).GetField("_soldLibrarySkillBooks", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(typeof(CharacterDomain).FullName, "_soldLibrarySkillBooks");
 
-    internal static FinderCatalog GetCatalog()
+    internal static FinderWorldStamp GetWorldStamp()
     {
         Location current = DomainManager.Taiwu.GetTaiwu().GetLocation();
+        int year = DomainManager.World.GetCurrYear();
+        int month = DomainManager.World.GetCurrMonthInYear();
+        int dateTick = unchecked((int)(((uint)year << 8) | (uint)(month & 0xff)));
+        return new FinderWorldStamp(current.AreaId, dateTick);
+    }
+
+    internal static FinderCatalog GetCatalog()
+    {
+        FinderWorldStamp stamp = GetWorldStamp();
         var areas = new List<AreaOption>(MapAreaData.RegularAreasCount);
         for (short areaId = 0; areaId < MapAreaData.RegularAreasCount; areaId++)
         {
@@ -185,8 +207,20 @@ internal static class MapSkillFinderService
             areas.Add(new AreaOption(areaId, config.Name, category, config.StateID));
         }
         // Packed game date lets the frontend drop cached results after a month change.
-        int dateTick = (DomainManager.World.GetCurrYear() << 8) | DomainManager.World.GetCurrMonthInYear();
-        return new FinderCatalog(current.AreaId, areas, dateTick);
+        return new FinderCatalog(stamp.CurrentAreaId, areas, stamp.DateTick);
+    }
+
+    internal static IReadOnlyList<CharacterDisplayRow> GetCharacterDisplays(IReadOnlyList<int> characterIds)
+    {
+        if (characterIds.Count > 64)
+            throw new ArgumentOutOfRangeException(nameof(characterIds));
+        var rows = new List<CharacterDisplayRow>(characterIds.Count);
+        foreach (int characterId in characterIds.Distinct())
+        {
+            TaiwuCharacter character = DomainManager.Character.GetElement_Objects(characterId);
+            rows.Add(new CharacterDisplayRow(characterId, SerializeCharacterDisplay(character)));
+        }
+        return rows;
     }
 
     internal static BookSearchResult SearchBooks(DataContext context, BookSearchRequest request)
@@ -250,7 +284,9 @@ internal static class MapSkillFinderService
                 location.BlockId,
                 organizationConfig?.Name ?? "无所属",
                 organization.Grade,
-                books));
+                books,
+                ResolvePosition(organization),
+                SerializeCharacterDisplay(character)));
         }
 
         ulong requiredMask = (1UL << request.Pages.Count) - 1UL;
@@ -315,7 +351,8 @@ internal static class MapSkillFinderService
             Location location = character.GetLocation();
             holders.Add(new BookHolderCandidate(
                 character.GetId(), ResolveName(character), location.AreaId, location.BlockId,
-                organizationConfig?.Name ?? "无所属", organization.Grade, books));
+                organizationConfig?.Name ?? "无所属", organization.Grade, books,
+                ResolvePosition(organization), string.Empty));
         }
         stopwatch.Stop();
         IReadOnlyList<BookCopyCandidate> taiwuBooks =
@@ -458,7 +495,8 @@ internal static class MapSkillFinderService
             rows.Add(new PersonSearchRow(
                 character.GetId(), name, location.AreaId, location.BlockId,
                 organizationConfig?.Name ?? "无所属", organization.OrgTemplateId,
-                organization.Grade, age, gender, abilities));
+                organization.Grade, age, gender, abilities,
+                ResolvePosition(organization), string.Empty));
         }
 
         PersonSearchRow[] ordered = rows
@@ -757,6 +795,44 @@ internal static class MapSkillFinderService
         return string.IsNullOrWhiteSpace(display) || display == real
             ? real
             : $"{real}（{display}）";
+    }
+
+    private static string ResolvePosition(OrganizationInfo organization)
+    {
+        OrganizationItem? org = organization.GetOrganizationConfig();
+        OrganizationMemberItem? member = organization.GetOrgMemberConfig();
+        if (org == null) return "无职位";
+        return string.IsNullOrWhiteSpace(member?.GradeName)
+            ? org.Name
+            : org.Name + member.GradeName;
+    }
+
+    private static unsafe string SerializeCharacterDisplay(TaiwuCharacter character)
+    {
+        int characterId = character.GetId();
+        int dateTick = GetWorldStamp().DateTick;
+        if (dateTick != CharacterDisplayCacheDateTick)
+        {
+            CharacterDisplayCache.Clear();
+            CharacterDisplayCacheOrder.Clear();
+            CharacterDisplayCacheDateTick = dateTick;
+        }
+        if (CharacterDisplayCache.TryGetValue(characterId, out string? cached) && cached != null)
+            return cached;
+
+        GameData.Domains.Character.Display.CharacterDisplayData display =
+            DomainManager.Character.GetCharacterDisplayData(characterId);
+        var bytes = new byte[display.GetSerializedSize()];
+        fixed (byte* pointer = bytes)
+            display.Serialize(pointer);
+        string encoded = Convert.ToBase64String(bytes);
+
+        while (CharacterDisplayCache.Count >= CharacterDisplayCacheCapacity &&
+               CharacterDisplayCacheOrder.TryDequeue(out int oldest))
+            CharacterDisplayCache.Remove(oldest);
+        CharacterDisplayCache[characterId] = encoded;
+        CharacterDisplayCacheOrder.Enqueue(characterId);
+        return encoded;
     }
 
     private static string ResolveFallbackName(TaiwuCharacter character)

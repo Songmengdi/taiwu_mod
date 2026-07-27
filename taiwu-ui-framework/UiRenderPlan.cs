@@ -112,6 +112,9 @@ internal static class UiRenderPlanCompiler
             case UiNativeImageElement image when image.Width <= 0f || image.Height <= 0f:
                 errors.Add(new(path, "Native image size must be positive."));
                 break;
+            case UiNativeHostElement host when host.Width <= 0f || host.Height <= 0f:
+                errors.Add(new(path, "Native host size must be positive."));
+                break;
         }
     }
 }

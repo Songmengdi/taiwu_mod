@@ -9,6 +9,8 @@ namespace MapSkillFinder.Backend;
 internal static class FinderModMethods
 {
     internal const string CatalogMethod = "TaiwuFinder.GetCatalog.v1";
+    internal const string WorldStampMethod = "TaiwuFinder.GetWorldStamp.v1";
+    internal const string CharacterDisplaysMethod = "TaiwuFinder.GetCharacterDisplays.v1";
     internal const string BookMethod = "TaiwuFinder.SearchBooks.v1";
     internal const string BookHoldingsMethod = "TaiwuFinder.GetBookHoldings.v1";
     internal const string PersonMethod = "TaiwuFinder.SearchPeople.v1";
@@ -18,6 +20,8 @@ internal static class FinderModMethods
     internal static void Register(string modId)
     {
         Register(modId, CatalogMethod, CreateCallback(nameof(GetCatalog)));
+        Register(modId, WorldStampMethod, CreateCallback(nameof(GetWorldStamp)));
+        Register(modId, CharacterDisplaysMethod, CreateCallback(nameof(GetCharacterDisplays)));
         Register(modId, BookMethod, CreateCallback(nameof(SearchBooks)));
         Register(modId, BookHoldingsMethod, CreateCallback(nameof(GetBookHoldings)));
         Register(modId, PersonMethod, CreateCallback(nameof(SearchPeople)));
@@ -50,7 +54,7 @@ internal static class FinderModMethods
             // Frontend features are introduced independently from the long-lived backend process.
             // A missing value in an older backend is read as 0 by the client, so it can ask for a restart
             // before attempting an unregistered method.
-            response.Set("ApiVersion", 3);
+            response.Set("ApiVersion", 5);
             response.Set("CurrentAreaId", (int)catalog.CurrentAreaId);
             response.Set("DateTick", catalog.DateTick);
             response.Set("AreaCount", catalog.Areas.Count);
@@ -61,6 +65,32 @@ internal static class FinderModMethods
                 response.Set($"AreaName{i}", area.Name);
                 response.Set($"AreaCategory{i}", (int)area.Category);
                 response.Set($"AreaState{i}", (int)area.StateId);
+            }
+        });
+
+    private static SerializableModData GetWorldStamp(DataContext context, SerializableModData parameter) =>
+        Safe("读取世界版本", response =>
+        {
+            FinderWorldStamp stamp = MapSkillFinderService.GetWorldStamp();
+            response.Set("CurrentAreaId", (int)stamp.CurrentAreaId);
+            response.Set("DateTick", stamp.DateTick);
+        });
+
+    private static SerializableModData GetCharacterDisplays(DataContext context, SerializableModData data) =>
+        Safe("读取人物展示数据", response =>
+        {
+            int count = Get(data, "Count", 0);
+            if (count is < 0 or > 64)
+                throw new ArgumentOutOfRangeException(nameof(count));
+            var ids = new List<int>(count);
+            for (int i = 0; i < count; i++)
+                ids.Add(Required(data, $"CharacterId{i}"));
+            IReadOnlyList<CharacterDisplayRow> rows = MapSkillFinderService.GetCharacterDisplays(ids);
+            response.Set("Count", rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                response.Set($"CharacterId{i}", rows[i].CharacterId);
+                response.Set($"AvatarData{i}", rows[i].AvatarData);
             }
         });
 
@@ -143,6 +173,8 @@ internal static class FinderModMethods
             response.Set(prefix + "BlockId", (int)holder.BlockId);
             response.Set(prefix + "Organization", holder.Organization);
             response.Set(prefix + "Grade", (int)holder.Grade);
+            response.Set(prefix + "Position", holder.Position);
+            response.Set(prefix + "AvatarData", holder.AvatarData);
             response.Set(prefix + "Coverage", checked((int)contribution.CoverageMask));
             response.Set(prefix + "BookCount", contribution.Books.Count);
             for (int k = 0; k < contribution.Books.Count; k++)
@@ -166,6 +198,8 @@ internal static class FinderModMethods
         response.Set(prefix + "BlockId", (int)holder.BlockId);
         response.Set(prefix + "Organization", holder.Organization);
         response.Set(prefix + "Grade", (int)holder.Grade);
+        response.Set(prefix + "Position", holder.Position);
+        response.Set(prefix + "AvatarData", holder.AvatarData);
         response.Set(prefix + "BookCount", holder.Books.Count);
         for (int k = 0; k < holder.Books.Count; k++)
         {
@@ -222,6 +256,8 @@ internal static class FinderModMethods
                 response.Set($"Grade{i}", (int)person.Grade);
                 response.Set($"Age{i}", (int)person.Age);
                 response.Set($"Gender{i}", (int)person.Gender);
+                response.Set($"Position{i}", person.Position);
+                response.Set($"AvatarData{i}", person.AvatarData);
                 response.Set($"AbilityCount{i}", person.Abilities.Count);
                 for (int j = 0; j < person.Abilities.Count; j++)
                 {

@@ -23,6 +23,13 @@ public enum TaiwuWindowPresentation
     Encyclopedia,
 }
 
+/// <summary>Controls whether a hidden window releases or retains its native view tree.</summary>
+public enum TaiwuWindowLifetime
+{
+    Transient,
+    KeepAlive,
+}
+
 public enum TaiwuButtonStyle
 {
     Primary,

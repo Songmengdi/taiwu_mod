@@ -8,9 +8,9 @@
     <RootNamespace>TaiwuUi</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>mod\Plugins</OutputPath>
-    <Version>2.1.5</Version>
+    <Version>2.1.6</Version>
     <AssemblyVersion>2.1.2.0</AssemblyVersion>
-    <FileVersion>2.1.5.0</FileVersion>
+    <FileVersion>2.1.6.0</FileVersion>
   </PropertyGroup>
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>

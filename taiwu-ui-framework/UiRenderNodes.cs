@@ -12,6 +12,7 @@ internal sealed class WindowDefinition
     internal TaiwuWindowLayer Layer { get; }
     internal TaiwuWindowCover Cover { get; }
     internal TaiwuWindowPresentation Presentation { get; }
+    internal TaiwuWindowLifetime Lifetime { get; }
     internal IReadOnlyList<UiNode> Nodes { get; }
 
     internal WindowDefinition(UiWindow source, IReadOnlyList<UiNode> nodes)
@@ -23,6 +24,7 @@ internal sealed class WindowDefinition
         Layer = source.Layer;
         Cover = source.Cover;
         Presentation = source.Presentation;
+        Lifetime = source.Lifetime;
         Nodes = nodes;
     }
 }
@@ -93,4 +95,14 @@ internal sealed class NativeImageNode(NativeAssetRef asset, float width, float h
     internal NativeAssetRef Asset { get; } = asset;
     internal float Width { get; } = width;
     internal float Height { get; } = height;
+}
+
+internal sealed class NativeHostNode(
+    float width, float height, Func<GameObject> factory, Action<GameObject>? release, bool deferred) : UiNode
+{
+    internal float Width { get; } = width;
+    internal float Height { get; } = height;
+    internal Func<GameObject> Factory { get; } = factory;
+    internal Action<GameObject>? Release { get; } = release;
+    internal bool Deferred { get; } = deferred;
 }

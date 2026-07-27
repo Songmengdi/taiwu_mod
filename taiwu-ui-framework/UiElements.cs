@@ -283,6 +283,21 @@ public sealed record UiNativeImageElement(NativeAssetRef Asset, float Width, flo
     internal override UiNode Compile() => new NativeImageNode(Asset, Width, Height);
 }
 
+/// <summary>
+/// Escape hatch for a game-native control whose visual tree is owned by the consumer.
+/// The factory is called when the element is mounted; the returned object is parented
+/// below a layout host and destroyed with the window.
+/// </summary>
+public sealed record UiNativeHostElement(
+    float Width,
+    float Height,
+    Func<UnityEngine.GameObject> Factory,
+    Action<UnityEngine.GameObject>? Release = null,
+    bool Deferred = false) : UiElement
+{
+    internal override UiNode Compile() => new NativeHostNode(Width, Height, Factory, Release, Deferred);
+}
+
 public sealed record UiWindow
 {
     public string OwnerId { get; init; }
@@ -293,6 +308,7 @@ public sealed record UiWindow
     public TaiwuWindowLayer Layer { get; init; }
     public TaiwuWindowCover Cover { get; init; }
     public TaiwuWindowPresentation Presentation { get; init; }
+    public TaiwuWindowLifetime Lifetime { get; init; }
     public UiElement Content { get; init; }
     public string Key => OwnerId + ":" + WindowId;
 
@@ -305,7 +321,8 @@ public sealed record UiWindow
         float height = 640f,
         TaiwuWindowLayer layer = TaiwuWindowLayer.Popup,
         TaiwuWindowCover cover = TaiwuWindowCover.Full,
-        TaiwuWindowPresentation presentation = TaiwuWindowPresentation.Dialog)
+        TaiwuWindowPresentation presentation = TaiwuWindowPresentation.Dialog,
+        TaiwuWindowLifetime lifetime = TaiwuWindowLifetime.Transient)
     {
         OwnerId = ownerId?.Trim() ?? string.Empty;
         WindowId = windowId?.Trim() ?? string.Empty;
@@ -316,6 +333,7 @@ public sealed record UiWindow
         Layer = layer;
         Cover = cover;
         Presentation = presentation;
+        Lifetime = lifetime;
     }
 }
 
@@ -421,6 +439,10 @@ public static class Ui
         new(selection, pages, options ?? new TaiwuTabViewOptions());
     public static UiNativeImageElement NativeImage(NativeAssetRef asset, float width, float height) =>
         new(asset, width, height);
+    public static UiNativeHostElement NativeHost(
+        float width, float height, Func<UnityEngine.GameObject> factory,
+        Action<UnityEngine.GameObject>? release = null, bool deferred = false) =>
+        new(width, height, factory ?? throw new ArgumentNullException(nameof(factory)), release, deferred);
 }
 
 internal static class UiElementCompiler

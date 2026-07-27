@@ -8,10 +8,11 @@
     <RootNamespace>MapSkillFinder.Frontend</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>mod\Plugins</OutputPath>
-    <Version>1.0.5</Version>
+    <Version>1.0.6</Version>
     <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.5.0</FileVersion>
+    <FileVersion>1.0.6.0</FileVersion>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CoreDll Condition="'$(CoreDll)' == ''">..\taiwu-ui-framework\mod\Plugins\TaiwuUi.Core.dll</CoreDll>
   </PropertyGroup>
   <PropertyGroup>
@@ -28,6 +29,7 @@
     <Compile Include="FindMapBlockPatch.cs" />
     <Compile Include="MapMarkTracker.cs" />
     <Compile Include="SkillFinderWindow.cs" />
+    <Compile Include="NativeCharacterCard.cs" />
     <Compile Include="RuntimePreview.cs" />
     <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
     <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />

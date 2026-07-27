@@ -7,6 +7,7 @@ using Game.Views.MapBlockCharList;
 using GameData.DLC.FiveLoong;
 using GameData.Domains.Character.Display;
 using GameData.Domains.Map;
+using HarmonyLib;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -24,6 +25,9 @@ internal static class NativeCharacterCard
     private static readonly FieldInfo CharIdField = typeof(MapBlockChar).GetField(
         "CharId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(typeof(MapBlockChar).FullName, "CharId");
+    private static readonly FieldInfo JieqingSignField = typeof(MapBlockChar).GetField(
+        "jieqingSign", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(typeof(MapBlockChar).FullName, "jieqingSign");
 
     internal static GameObject CreatePlaceholder()
     {
@@ -98,6 +102,7 @@ internal static class NativeCharacterCard
         state.CharacterId = characterId;
         state.Holder ??= new FinderCharacterHolder();
         state.Holder.Configure(canInteract, onInteract);
+        DisableUnusedJieqingSign(card);
         bool hasNativeDisplay = state.NativeDisplayApplied;
         if (!string.Equals(state.DisplayData, displayData, StringComparison.Ordinal))
         {
@@ -193,6 +198,15 @@ internal static class NativeCharacterCard
         }
     }
 
+    private static void DisableUnusedJieqingSign(MapBlockChar card)
+    {
+        // MapBlockChar.Set otherwise starts an asynchronous legacy-point query for
+        // every clone. Finder cards never show this sign, and rebuilding a result
+        // list can destroy the clone before that callback returns.
+        if (JieqingSignField.GetValue(card) is CImage sign)
+            sign.gameObject.SetActive(false);
+    }
+
     private static void SetOptionalChild(Transform root, string name, bool active)
     {
         Transform? child = root.Find(name);
@@ -246,4 +260,25 @@ internal sealed class ClearSelectionOnCharacterHover : MonoBehaviour, IPointerEn
         if (EventSystem.current?.currentSelectedGameObject != null)
             EventSystem.current.SetSelectedGameObject(null, eventData);
     }
+}
+
+/// <summary>
+/// Finder cards do not display the game's legacy-point sign. Skipping its private
+/// refresh avoids an asynchronous callback retaining a clone across list rebuilds.
+/// Main-map cards have no NativeCharacterCardState and keep the original behavior.
+/// </summary>
+internal static class FinderCharacterJieqingSignPatch
+{
+    internal static void Install(Harmony harmony)
+    {
+        MethodInfo original = AccessTools.Method(
+            typeof(MapBlockChar), "RefreshJieqingSign", new[] { typeof(int), typeof(sbyte) })
+            ?? throw new MissingMethodException(typeof(MapBlockChar).FullName, "RefreshJieqingSign(int, sbyte)");
+        MethodInfo prefix = AccessTools.Method(typeof(FinderCharacterJieqingSignPatch), nameof(Prefix))
+            ?? throw new MissingMethodException(typeof(FinderCharacterJieqingSignPatch).FullName, nameof(Prefix));
+        harmony.Patch(original, prefix: new HarmonyMethod(prefix));
+    }
+
+    private static bool Prefix(MapBlockChar __instance) =>
+        __instance.GetComponent<NativeCharacterCardState>() == null;
 }

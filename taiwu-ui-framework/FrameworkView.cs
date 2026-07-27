@@ -333,7 +333,13 @@ internal sealed class FrameworkView : UIBase
                     try
                     {
                         for (int index = host.childCount - 1; index >= 0; index--)
-                            DestroyImmediate(host.GetChild(index).gameObject);
+                        {
+                            GameObject oldRoot = host.GetChild(index).gameObject;
+                            foreach (NativeHostLease lease in
+                                     oldRoot.GetComponentsInChildren<NativeHostLease>(true))
+                                lease.ReleaseBeforeHostDestroy();
+                            DestroyImmediate(oldRoot);
+                        }
                         BuildNodes(host, nextNodes);
                         Canvas.ForceUpdateCanvases();
                     }
@@ -836,6 +842,19 @@ internal sealed class NativeHostLease : MonoBehaviour
     private void OnDestroy()
     {
         if (_releaseWhenDisabled) ReleaseOnce();
+    }
+
+    // Dynamic fragments are synchronously replaced while their parent window can
+    // remain alive. Detach pooled native content before DestroyImmediate walks the
+    // old framework subtree; OnDisable cannot distinguish this from window hiding.
+    internal void ReleaseBeforeHostDestroy()
+    {
+        if (_content == null || _release == null) return;
+        GameObject content = _content;
+        Action<GameObject> release = _release;
+        _content = null;
+        _release = null;
+        release(content);
     }
 
     private void ReleaseOnce()

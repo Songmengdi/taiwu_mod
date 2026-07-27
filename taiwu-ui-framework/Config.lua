@@ -17,5 +17,5 @@ return {
     DefaultSettings = { },
     SettingGroups = { },
     TagList = { [1] = "Modifications", [2] = "Compatible Mods" },
-    UpdateLogList = { [1] = { Timestamp = 1784564482 }, [2] = { Timestamp = 1784649598 }, [3] = { Timestamp = 1784779682 }, [4] = { Timestamp = 1784806536 }, [5] = { Timestamp = 1784823707 }, [6] = { Timestamp = 1785131011 } },
+    UpdateLogList = { [1] = { Timestamp = 1784564482 }, [2] = { Timestamp = 1784649598 }, [3] = { Timestamp = 1784779682 }, [4] = { Timestamp = 1784806536 }, [5] = { Timestamp = 1784823707 }, [6] = { Timestamp = 1785131011 }, [7] = { Timestamp = 1785143395 } },
 }

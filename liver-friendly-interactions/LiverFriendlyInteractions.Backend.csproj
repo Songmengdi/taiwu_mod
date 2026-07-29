@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LiverFriendlyInteractions.Backend</AssemblyName>
+    <RootNamespace>LiverFriendlyInteractions.Backend</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>mod\Plugins</OutputPath>
+    <Version>0.7.0</Version>
+    <AssemblyVersion>0.7.0.0</AssemblyVersion>
+    <FileVersion>0.7.0.0</FileVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <BackendDir>$(GameDir)\Backend</BackendDir>
+    <LocalModDir>$(GameDir)\Mod\护肝交互</LocalModDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+    <Reference Include="0Harmony" HintPath="$(BackendDir)\0Harmony.dll" Private="false" />
+    <Reference Include="TaiwuModdingLib" HintPath="$(BackendDir)\TaiwuModdingLib.dll" Private="false" />
+    <Reference Include="GameData" HintPath="$(BackendDir)\GameData.dll" Private="false" />
+    <Reference Include="GameData.Shared" HintPath="$(BackendDir)\GameData.Shared.dll" Private="false" />
+    <Reference Include="GameData.Common" HintPath="$(BackendDir)\GameData.Common.dll" Private="false" />
+    <Reference Include="GameData.Utilities" HintPath="$(BackendDir)\GameData.Utilities.dll" Private="false" />
+    <Reference Include="GameData.Adventure" HintPath="$(BackendDir)\GameData.Adventure.dll" Private="false" />
+  </ItemGroup>
+
+  <Target Name="DeployLocalMod" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <MakeDir Directories="$(LocalModDir)\Plugins" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Config.lua" DestinationFolder="$(LocalModDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(LocalModDir)\Plugins" />
+  </Target>
+</Project>

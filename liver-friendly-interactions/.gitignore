@@ -1,0 +1,3 @@
+mod/Plugins/*.dll
+mod/Plugins/*.pdb
+mod/Plugins/*.deps.json

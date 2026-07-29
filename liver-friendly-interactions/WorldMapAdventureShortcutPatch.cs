@@ -20,13 +20,19 @@ internal static class WorldMapAdventureShortcutPatch
     {
         bool shortcutPressed = Input.GetKeyDown(KeyCode.Alpha1) ||
                                Input.GetKeyDown(KeyCode.Keypad1);
-        bool worldMapHasFocus = UIManager.Instance.IsFocusElement(__instance.Element);
-        bool textInputHasFocus = EventSystem.current?.currentSelectedGameObject?
-            .GetComponentInParent<TMP_InputField>() != null;
+        if (!shortcutPressed)
+        {
+            return;
+        }
 
-        MapElementAdventureRemake? currentAdventure = shortcutPressed
-            ? FindCurrentBlockAdventure(__instance)
+        bool worldMapHasFocus = UIManager.Instance.IsFocusElement(__instance.Element);
+        GameObject? selectedObject = EventSystem.current != null
+            ? EventSystem.current.currentSelectedGameObject
             : null;
+        bool textInputHasFocus = selectedObject != null &&
+                                 selectedObject.GetComponentInParent<TMP_InputField>() != null;
+
+        MapElementAdventureRemake? currentAdventure = FindCurrentBlockAdventure(__instance);
 
         if (!AdventureNumberShortcutPolicy.ShouldHandleWorldMapAdventure(
                 shortcutPressed,

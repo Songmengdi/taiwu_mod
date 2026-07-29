@@ -3,7 +3,7 @@ using TaiwuModdingLib.Core.Plugin;
 
 namespace LiverFriendlyInteractions.Backend;
 
-[PluginConfig("LiverFriendlyInteractions.Backend", "SMD", "0.8.0")]
+[PluginConfig("LiverFriendlyInteractions.Backend", "SMD", "0.8.1")]
 public sealed class BackendPlugin : TaiwuRemakePlugin
 {
     private Harmony? _harmony;

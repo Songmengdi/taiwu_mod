@@ -3,7 +3,7 @@ using TaiwuModdingLib.Core.Plugin;
 
 namespace LiverFriendlyInteractions.Frontend;
 
-[PluginConfig("LiverFriendlyInteractions.Frontend", "SMD", "0.8.0")]
+[PluginConfig("LiverFriendlyInteractions.Frontend", "SMD", "0.8.1")]
 public sealed class FrontendPlugin : TaiwuRemakePlugin
 {
     public override void Initialize()

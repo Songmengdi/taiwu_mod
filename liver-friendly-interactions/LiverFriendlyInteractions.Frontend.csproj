@@ -9,9 +9,9 @@
     <RootNamespace>LiverFriendlyInteractions.Frontend</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>mod\Plugins</OutputPath>
-    <Version>0.8.0</Version>
-    <AssemblyVersion>0.8.0.0</AssemblyVersion>
-    <FileVersion>0.8.0.0</FileVersion>
+    <Version>0.8.1</Version>
+    <AssemblyVersion>0.8.1.0</AssemblyVersion>
+    <FileVersion>0.8.1.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -24,6 +24,7 @@
     <Compile Include="FrontendPlugin.cs" />
     <Compile Include="AdventureNumberShortcutPatch.cs" />
     <Compile Include="AdventureNumberShortcutPolicy.cs" />
+    <Compile Include="WorldMapAdventureShortcutPatch.cs" />
     <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
     <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />
     <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />

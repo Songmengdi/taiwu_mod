@@ -65,6 +65,24 @@ Assert("交互列表为空", expected: false,
 
 Console.WriteLine("护肝交互奇遇数字快捷键策略测试通过：5 项");
 
+Assert("大地图当前地格奇遇快捷键", expected: true,
+    AdventureNumberShortcutPolicy.ShouldHandleWorldMapAdventure(
+        shortcutPressed: true,
+        worldMapHasFocus: true,
+        textInputHasFocus: false,
+        inAdventure: false,
+        currentBlockHasAdventureIcon: true));
+Assert("大地图人物不视为奇遇图标", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleWorldMapAdventure(true, true, false, false, false));
+Assert("奇遇内部不触发大地图入口", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleWorldMapAdventure(true, true, false, true, true));
+Assert("大地图不是顶层", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleWorldMapAdventure(true, false, false, false, true));
+Assert("大地图搜索框正在输入", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleWorldMapAdventure(true, true, true, false, true));
+
+Console.WriteLine("护肝交互大地图奇遇快捷键策略测试通过：5 项");
+
 static void Assert<T>(string name, T expected, T actual)
     where T : IEquatable<T>
 {

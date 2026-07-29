@@ -11,4 +11,16 @@ internal static class AdventureNumberShortcutPolicy
         adventureHasFocus &&
         !textInputHasFocus &&
         displayItemCount > 0;
+
+    internal static bool ShouldHandleWorldMapAdventure(
+        bool shortcutPressed,
+        bool worldMapHasFocus,
+        bool textInputHasFocus,
+        bool inAdventure,
+        bool currentBlockHasAdventureIcon) =>
+        shortcutPressed &&
+        worldMapHasFocus &&
+        !textInputHasFocus &&
+        !inAdventure &&
+        currentBlockHasAdventureIcon;
 }

@@ -4,7 +4,7 @@ using TaiwuModdingLib.Core.Plugin;
 
 namespace LiverFriendlyInteractions.Frontend;
 
-[PluginConfig("LiverFriendlyInteractions.Frontend", "SMD", "0.8.2")]
+[PluginConfig("LiverFriendlyInteractions.Frontend", "SMD", "0.8.4")]
 public sealed class FrontendPlugin : TaiwuRemakePlugin
 {
     public override void Initialize()

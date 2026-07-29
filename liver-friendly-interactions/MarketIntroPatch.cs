@@ -88,16 +88,21 @@ internal static class MarketIntroDisplayInterceptor
         TaiwuEventDomain domain,
         TaiwuEventDisplayData? displayData)
     {
-        int optionCount = displayData?.EventOptionInfos?.Count ?? 0;
-        if (!MarketIntroPolicy.ShouldFastForwardDisplay(
-                MarketIntroFastForward.Active,
-                displayData?.EventGuid,
-                optionCount))
+        if (displayData?.EventOptionInfos is not { } optionInfos)
         {
             return false;
         }
 
-        string optionKey = displayData!.EventOptionInfos[0].OptionKey;
+        int optionIndex = MarketIntroPolicy.FindFastForwardOptionIndex(
+            MarketIntroFastForward.Active,
+            displayData.EventGuid,
+            optionInfos.Select(option => option.OptionKey).ToArray());
+        if (optionIndex < 0)
+        {
+            return false;
+        }
+
+        string optionKey = optionInfos[optionIndex].OptionKey;
         MarketIntroFastForward.RecordSkippedDisplay();
         domain.EventSelect(displayData.EventGuid, optionKey);
         return true;

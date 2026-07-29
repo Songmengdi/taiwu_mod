@@ -19,23 +19,61 @@ Assert("其他首次事件", expected: false,
     MarketIntroPolicy.ShouldStartFastForward(
         "00000000-0000-0000-0000-000000000000",
         onlyOnce: true));
-Assert("活动中的单选说明", expected: true,
-    MarketIntroPolicy.ShouldFastForwardDisplay(
+Assert("活动中的单选说明", expected: 0,
+    MarketIntroPolicy.FindFastForwardOptionIndex(
         active: true,
         eventGuid: MarketIntroPolicy.KnownIntroEventGuids[0],
-        visibleOptionCount: 1));
-Assert("活动中的真实多选", expected: false,
-    MarketIntroPolicy.ShouldFastForwardDisplay(
+        visibleOptionKeys: new[] { "Option_Only" }));
+Assert("大型集市教程数量", expected: 7,
+    MarketIntroPolicy.LargeMarketTutorialDismissOptionKeys.Count);
+foreach ((string eventGuid, IReadOnlyList<string> dismissKeys) in
+         MarketIntroPolicy.LargeMarketTutorialDismissOptionKeys)
+{
+    Assert($"识别大型集市教程跳过项 {eventGuid}", expected: 1,
+        MarketIntroPolicy.FindFastForwardOptionIndex(
+            active: true,
+            eventGuid: eventGuid,
+            visibleOptionKeys: new[] { "Option_Help", dismissKeys[0], "Option_MoreHelp" }));
+}
+Assert("大型集市教程延迟发布后仍略过", expected: 1,
+    MarketIntroPolicy.FindFastForwardOptionIndex(
+        active: false,
+        eventGuid: "23df3e52-6d7b-404c-b5a9-1d39c16bdb34",
+        visibleOptionKeys: new[]
+        {
+            "Option_Help",
+            "Option_1733734559",
+            "Option_MoreHelp",
+        }));
+Assert("服牛帮跳过项无需位于第一项", expected: 4,
+    MarketIntroPolicy.FindFastForwardOptionIndex(
+        active: true,
+        eventGuid: "99f17c6d-12f5-4d42-8254-bc5e4cfcfb78",
+        visibleOptionKeys: new[]
+        {
+            "Option_1322292162",
+            "Option_-1540531955",
+            "Option_883977983",
+            "Option_-1935442782",
+            "Option_-1334330028",
+        }));
+Assert("大型集市真实多选", expected: -1,
+    MarketIntroPolicy.FindFastForwardOptionIndex(
         active: true,
         eventGuid: "next-event",
-        visibleOptionCount: 2));
-Assert("非集市快进期间的单选事件", expected: false,
-    MarketIntroPolicy.ShouldFastForwardDisplay(
+        visibleOptionKeys: new[] { "Option_A", "Option_B" }));
+Assert("教程页缺少预期跳过项", expected: -1,
+    MarketIntroPolicy.FindFastForwardOptionIndex(
+        active: true,
+        eventGuid: "23df3e52-6d7b-404c-b5a9-1d39c16bdb34",
+        visibleOptionKeys: new[] { "Option_HelpA", "Option_HelpB" }));
+Assert("非集市快进期间的单选事件", expected: -1,
+    MarketIntroPolicy.FindFastForwardOptionIndex(
         active: false,
         eventGuid: "other-event",
-        visibleOptionCount: 1));
+        visibleOptionKeys: new[] { "Option_Only" }));
 
-Console.WriteLine("护肝交互集市引导策略测试通过：21 项");
+Console.WriteLine("护肝交互集市引导策略测试通过：32 项");
 
 Assert("休息结果显示数据", expected: true,
     MeditationRestPolicy.ShouldSkipResultDisplay(MeditationRestPolicy.RestResultEventGuid, hasDisplayData: true));

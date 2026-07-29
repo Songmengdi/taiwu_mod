@@ -31,6 +31,31 @@ internal static class MarketIntroPolicy
     private static readonly HashSet<string> KnownIntroEventGuidSet =
         new(KnownIntroEventGuids, StringComparer.Ordinal);
 
+    // The large Spring Market introduction is a tutorial menu rather than a
+    // meaningful choice. Most merchants put the dismiss option first, but
+    // Funiu Bang puts it last and several merchants have two mutually
+    // exclusive dismiss options. Match by event and option key instead of by
+    // position or localized text.
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>>
+        LargeMarketTutorialDismissOptionKeys { get; } =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["35fe50f2-b98c-4b8f-8763-8523492593a2"] =
+                new[] { "Option_373688144" }, // 文山书海阁
+            ["38bc8cf4-e653-44b2-b793-a42e1b05d597"] =
+                new[] { "Option_1451118799", "Option_-1229110468" }, // 大武魁
+            ["28f41b60-4b35-4b21-a743-8e4bf0733128"] =
+                new[] { "Option_817779741", "Option_-1398056254" }, // 奇货斋
+            ["6d762bd5-ad84-4d9d-a606-e8746840603c"] =
+                new[] { "Option_1900367150", "Option_752079466" }, // 公输坊
+            ["eca473b1-4b53-4401-96a5-9bfe3cf26b77"] =
+                new[] { "Option_241669961" }, // 五湖商会
+            ["99f17c6d-12f5-4d42-8254-bc5e4cfcfb78"] =
+                new[] { "Option_-1334330028" }, // 服牛帮
+            ["23df3e52-6d7b-404c-b5a9-1d39c16bdb34"] =
+                new[] { "Option_1733734559", "Option_1388688129" }, // 回春堂
+        };
+
     public static bool ShouldStartFastForward(string? eventGuid, bool onlyOnce)
     {
         return onlyOnce &&
@@ -38,13 +63,40 @@ internal static class MarketIntroPolicy
                KnownIntroEventGuidSet.Contains(eventGuid);
     }
 
-    public static bool ShouldFastForwardDisplay(
+    public static int FindFastForwardOptionIndex(
         bool active,
         string? eventGuid,
-        int visibleOptionCount)
+        IReadOnlyList<string> visibleOptionKeys)
     {
-        return active &&
-               eventGuid is not null &&
-               visibleOptionCount == 1;
+        if (eventGuid is null || visibleOptionKeys.Count == 0)
+        {
+            return -1;
+        }
+
+        if (LargeMarketTutorialDismissOptionKeys.TryGetValue(
+                eventGuid,
+                out IReadOnlyList<string>? dismissOptionKeys))
+        {
+            for (int index = 0; index < visibleOptionKeys.Count; index++)
+            {
+                if (dismissOptionKeys.Contains(
+                        visibleOptionKeys[index],
+                        StringComparer.Ordinal))
+                {
+                    return index;
+                }
+            }
+        }
+
+        // Ordinary one-option layers are safe to skip only while handling a
+        // confirmed onlyOnce market entrance. Large-market tutorial menus are
+        // queued and published after that call scope has ended, so their exact
+        // event/option whitelist above intentionally does not require active.
+        if (!active)
+        {
+            return -1;
+        }
+
+        return visibleOptionKeys.Count == 1 ? 0 : -1;
     }
 }

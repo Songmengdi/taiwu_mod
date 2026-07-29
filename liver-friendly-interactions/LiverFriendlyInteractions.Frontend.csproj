@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>LiverFriendlyInteractions.Frontend</AssemblyName>
+    <RootNamespace>LiverFriendlyInteractions.Frontend</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>mod\Plugins</OutputPath>
+    <Version>0.8.0</Version>
+    <AssemblyVersion>0.8.0.0</AssemblyVersion>
+    <FileVersion>0.8.0.0</FileVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
+    <ManagedDir>$(GameDir)\The Scroll of Taiwu_Data\Managed</ManagedDir>
+    <LocalModDir>$(GameDir)\Mod\护肝交互</LocalModDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="FrontendPlugin.cs" />
+    <Compile Include="AdventureNumberShortcutPatch.cs" />
+    <Compile Include="AdventureNumberShortcutPolicy.cs" />
+    <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
+    <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="GameData.Adventure" HintPath="$(ManagedDir)\GameData.Adventure.dll" Private="false" />
+    <Reference Include="GameData.Shared" HintPath="$(ManagedDir)\GameData.Shared.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.InputLegacyModule" HintPath="$(ManagedDir)\UnityEngine.InputLegacyModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="$(ManagedDir)\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="UnityEngine.UIModule" HintPath="$(ManagedDir)\UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)\Unity.TextMeshPro.dll" Private="false" />
+  </ItemGroup>
+
+  <Target Name="DeployLocalMod" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <MakeDir Directories="$(LocalModDir)\Plugins" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Config.lua" DestinationFolder="$(LocalModDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(LocalModDir)\Plugins" />
+  </Target>
+</Project>

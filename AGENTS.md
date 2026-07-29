@@ -10,7 +10,7 @@
 | `taiwu-ui-framework/` | TaiwuUiFramework | 声明式原生 UI 框架 2.0（TaiwuUi.Core.dll）。消费 MOD 用 C# element tree 描述界面，框架负责验证、布局、差异更新。详见其 `README.md` / `ARCHITECTURE.md`。 |
 | `map-skill-finder/` | 太吾寻访 | 全屏寻访工具：功法书/技艺书/拼书组合/人物/商会查询与地图标记。**依赖 taiwu-ui-framework**（前端 csproj 引用 `TaiwuUi.Core.dll`）。 |
 | `combat-skill-preset-binding/` | 运功预设绑定 | 后端单 DLL，无 UI。切换运功预设时自动恢复每门功法的突破预设（突破盘/玄机格/玄机之物）。 |
-| `liver-friendly-interactions/` | 护肝交互 | 后端单 DLL。保留原生结算与 `onlyOnce` 状态，同时略过集市强制单选说明和休息结果确认。 |
+| `liver-friendly-interactions/` | 护肝交互 | 前端 + 后端双 DLL。保留原生结算与 `onlyOnce` 状态，略过集市强制单选说明和休息结果确认，并为奇遇交互列表提供数字键快捷操作。 |
 
 ## 关键路径
 
@@ -27,9 +27,10 @@ cd combat-skill-preset-binding
 dotnet build .\CombatSkillPresetBinding.Backend.csproj -c Release
 .\deploy.cmd
 
-# liver-friendly-interactions：Release 构建自动部署到本地游戏 MOD 目录
+# liver-friendly-interactions：前后端 Release 构建自动部署到本地游戏 MOD 目录
 cd liver-friendly-interactions
 dotnet build .\LiverFriendlyInteractions.Backend.csproj -c Release
+dotnet build .\LiverFriendlyInteractions.Frontend.csproj -c Release
 
 # taiwu-probe-dual：构建即自动部署（TaiwuProbe.props 里的 TaiwuDeployToGame target）
 cd taiwu-probe-dual
@@ -53,7 +54,7 @@ dotnet build MapSkillFinder.Frontend.csproj -c Release
 - `taiwu-ui-framework/tests/` — TaiwuUi.Core 契约测试（net10.0）
 - `map-skill-finder/tests/` — 领域逻辑测试（拼书求解等，net8.0）
 - `taiwu-probe-dual/tests/` — 协议测试与前后端桥测试（net10.0）
-- `liver-friendly-interactions/tests/` — 集市入口与休息确认策略测试（net8.0）
+- `liver-friendly-interactions/tests/` — 集市入口、休息确认与奇遇数字快捷键策略测试（net8.0）
 
 ## 运行期验证（重要）
 

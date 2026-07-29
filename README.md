@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `map-skill-finder/` | 太吾寻访 | 原生风格全屏寻访工具：按功法书/技艺书/人物/商会等条件查询持有人，支持拼书组合求解与地图标记。 |
 | `combat-skill-preset-binding/` | 运功预设绑定 | 每套运功预设自动记住各功法的突破预设，切换运功方案时自动恢复突破盘与玄机配置。 |
-| `liver-friendly-interactions/` | 护肝交互 | 自动略过小型集会与大型春日集市的强制单选说明，以及休息结算后的冗余确认。 |
+| `liver-friendly-interactions/` | 护肝交互 | 自动略过集市强制单选说明和休息结算后的冗余确认，并用数字键操作奇遇交互列表。 |
 | `taiwu-ui-framework/` | TaiwuUiFramework | 声明式原生 UI 框架，让消费 MOD 用 C# element tree 描述界面（太吾寻访基于它构建）。 |
 | `taiwu-probe-dual/` | TaiwuProbeDual | 调试探针：游戏内启动 MCP 服务，供 AI Agent 做 UI 自动化、反射求值、热加载与日志读取。 |
 

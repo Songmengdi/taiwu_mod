@@ -1,4 +1,5 @@
 using LiverFriendlyInteractions.Backend;
+using LiverFriendlyInteractions.Frontend;
 
 Assert("集市入口数量", expected: 14, MarketIntroPolicy.KnownIntroEventGuids.Count);
 Assert("集市入口 GUID 无重复", expected: 14,
@@ -46,6 +47,23 @@ Assert("其他事件", expected: false,
     MeditationRestPolicy.ShouldSkipResultDisplay("00000000-0000-0000-0000-000000000000", hasDisplayData: true));
 
 Console.WriteLine("护肝交互打坐休息策略测试通过：4 项");
+
+Assert("奇遇第一项快捷键", expected: true,
+    AdventureNumberShortcutPolicy.ShouldHandleFirstOption(
+        shortcutPressed: true,
+        adventureHasFocus: true,
+        textInputHasFocus: false,
+        displayItemCount: 1));
+Assert("未按快捷键", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleFirstOption(false, true, false, 1));
+Assert("弹窗已取得焦点", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleFirstOption(true, false, false, 1));
+Assert("正在编辑搜索框", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleFirstOption(true, true, true, 1));
+Assert("交互列表为空", expected: false,
+    AdventureNumberShortcutPolicy.ShouldHandleFirstOption(true, true, false, 0));
+
+Console.WriteLine("护肝交互奇遇数字快捷键策略测试通过：5 项");
 
 static void Assert<T>(string name, T expected, T actual)
     where T : IEquatable<T>

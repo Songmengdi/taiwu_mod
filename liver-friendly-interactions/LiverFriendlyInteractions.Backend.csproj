@@ -8,9 +8,9 @@
     <RootNamespace>LiverFriendlyInteractions.Backend</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>mod\Plugins</OutputPath>
-    <Version>0.7.0</Version>
-    <AssemblyVersion>0.7.0.0</AssemblyVersion>
-    <FileVersion>0.7.0.0</FileVersion>
+    <Version>0.8.0</Version>
+    <AssemblyVersion>0.8.0.0</AssemblyVersion>
+    <FileVersion>0.8.0.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -21,6 +21,9 @@
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="AdventureNumberShortcutPatch.cs" />
+    <Compile Remove="AdventureNumberShortcutPolicy.cs" />
+    <Compile Remove="FrontendPlugin.cs" />
     <Reference Include="0Harmony" HintPath="$(BackendDir)\0Harmony.dll" Private="false" />
     <Reference Include="TaiwuModdingLib" HintPath="$(BackendDir)\TaiwuModdingLib.dll" Private="false" />
     <Reference Include="GameData" HintPath="$(BackendDir)\GameData.dll" Private="false" />

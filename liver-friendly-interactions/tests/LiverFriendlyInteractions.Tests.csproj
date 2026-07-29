@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="..\MarketIntroPolicy.cs" Link="MarketIntroPolicy.cs" />
     <Compile Include="..\MeditationRestPolicy.cs" Link="MeditationRestPolicy.cs" />
+    <Compile Include="..\AdventureNumberShortcutPolicy.cs" Link="AdventureNumberShortcutPolicy.cs" />
   </ItemGroup>
 </Project>

@@ -1,3 +1,4 @@
+using System.Linq;
 using GameData.Adventure;
 using GameData.Domains.Adventure;
 using GameData.Domains.TaiwuEvent;
@@ -15,18 +16,20 @@ namespace LiverFriendlyInteractions.Backend;
         typeof(EAdventureElementEventTriggerType),
         typeof(EventArgBox),
     })]
-internal static class LargeMarketMerchantArrivalPatch
+internal static class AdventureForcedInteractionPatch
 {
     private static bool Prefix(
-        AdventureRuntime adventure,
         AdventureElement element,
         EAdventureElementEventTriggerType triggerType,
         ref EAdventureChanged __result)
     {
-        if (!LargeMarketMerchantArrivalPolicy.ShouldSuppressForcedInteraction(
-                adventure.CoreId,
-                element.CharacterId,
-                triggerType == EAdventureElementEventTriggerType.TaiwuArrivedElement))
+        bool hasManualInteractEvent = element.Core.Events.Any(
+            eventData => eventData.TriggerType ==
+                         EAdventureElementEventTriggerType.ManualInteract);
+
+        if (!AdventureForcedInteractionPolicy.ShouldSuppressArrival(
+                triggerType == EAdventureElementEventTriggerType.TaiwuArrivedElement,
+                hasManualInteractEvent))
         {
             return true;
         }

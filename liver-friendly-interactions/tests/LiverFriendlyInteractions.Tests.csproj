@@ -10,6 +10,6 @@
     <Compile Include="..\MarketIntroPolicy.cs" Link="MarketIntroPolicy.cs" />
     <Compile Include="..\MeditationRestPolicy.cs" Link="MeditationRestPolicy.cs" />
     <Compile Include="..\AdventureNumberShortcutPolicy.cs" Link="AdventureNumberShortcutPolicy.cs" />
-    <Compile Include="..\LargeMarketMerchantArrivalPolicy.cs" Link="LargeMarketMerchantArrivalPolicy.cs" />
+    <Compile Include="..\AdventureForcedInteractionPolicy.cs" Link="AdventureForcedInteractionPolicy.cs" />
   </ItemGroup>
 </Project>

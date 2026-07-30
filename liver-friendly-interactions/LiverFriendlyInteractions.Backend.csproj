@@ -32,6 +32,7 @@
     <Reference Include="GameData.Common" HintPath="$(BackendDir)\GameData.Common.dll" Private="false" />
     <Reference Include="GameData.Utilities" HintPath="$(BackendDir)\GameData.Utilities.dll" Private="false" />
     <Reference Include="GameData.Adventure" HintPath="$(BackendDir)\GameData.Adventure.dll" Private="false" />
+    <Reference Include="Google.Protobuf" HintPath="$(BackendDir)\Google.Protobuf.dll" Private="false" />
   </ItemGroup>
 
   <Target Name="DeployLocalMod" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">

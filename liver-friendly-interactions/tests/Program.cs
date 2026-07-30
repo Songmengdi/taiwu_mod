@@ -121,28 +121,20 @@ Assert("大地图搜索框正在输入", expected: false,
 
 Console.WriteLine("护肝交互大地图奇遇快捷键策略测试通过：5 项");
 
-Assert("公输坊大型奇遇抵达商人格不强制交互", expected: true,
-    LargeMarketMerchantArrivalPolicy.ShouldSuppressForcedInteraction(
-        adventureCoreId: LargeMarketMerchantArrivalPolicy.GongshufangLargeAdventureCoreId,
-        characterId: 12212,
-        isTaiwuArrivedElement: true));
-Assert("公输坊大型奇遇手动交互保留", expected: false,
-    LargeMarketMerchantArrivalPolicy.ShouldSuppressForcedInteraction(
-        adventureCoreId: LargeMarketMerchantArrivalPolicy.GongshufangLargeAdventureCoreId,
-        characterId: 12212,
-        isTaiwuArrivedElement: false));
-Assert("公输坊大型奇遇非人物元素不拦截", expected: false,
-    LargeMarketMerchantArrivalPolicy.ShouldSuppressForcedInteraction(
-        adventureCoreId: LargeMarketMerchantArrivalPolicy.GongshufangLargeAdventureCoreId,
-        characterId: -1,
-        isTaiwuArrivedElement: true));
-Assert("其他奇遇人物抵达事件不拦截", expected: false,
-    LargeMarketMerchantArrivalPolicy.ShouldSuppressForcedInteraction(
-        adventureCoreId: 1,
-        characterId: 12212,
-        isTaiwuArrivedElement: true));
+Assert("有主动入口的抵达事件不强制触发", expected: true,
+    AdventureForcedInteractionPolicy.ShouldSuppressArrival(
+        isTaiwuArrivedElement: true,
+        hasManualInteractEvent: true));
+Assert("主动交互事件保留", expected: false,
+    AdventureForcedInteractionPolicy.ShouldSuppressArrival(
+        isTaiwuArrivedElement: false,
+        hasManualInteractEvent: true));
+Assert("纯抵达剧情事件保留", expected: false,
+    AdventureForcedInteractionPolicy.ShouldSuppressArrival(
+        isTaiwuArrivedElement: true,
+        hasManualInteractEvent: false));
 
-Console.WriteLine("护肝交互公输坊商人抵达策略测试通过：4 项");
+Console.WriteLine("护肝交互奇遇强制交互策略测试通过：3 项");
 
 static void Assert<T>(string name, T expected, T actual)
     where T : IEquatable<T>

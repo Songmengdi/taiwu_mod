@@ -19,8 +19,11 @@ internal static class AdventureNumberShortcutPatch
         bool shortcutPressed = Input.GetKeyDown(KeyCode.Alpha1) ||
                                Input.GetKeyDown(KeyCode.Keypad1);
         bool adventureHasFocus = UIManager.Instance.IsFocusElement(__instance.Element);
-        bool textInputHasFocus = EventSystem.current?.currentSelectedGameObject?
-            .GetComponentInParent<TMP_InputField>() != null;
+        GameObject? selectedObject = EventSystem.current != null
+            ? EventSystem.current.currentSelectedGameObject
+            : null;
+        bool textInputHasFocus = selectedObject != null &&
+                                 selectedObject.GetComponentInParent<TMP_InputField>() != null;
         IReadOnlyList<ViewAdventureRemake.ElementDisplayItem> items = __instance.DisplayItems;
 
         if (!AdventureNumberShortcutPolicy.ShouldHandleFirstOption(

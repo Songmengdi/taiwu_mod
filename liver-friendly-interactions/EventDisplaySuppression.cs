@@ -27,3 +27,11 @@ internal static class EventDisplayInterceptionPatch
         return true;
     }
 }
+
+[HarmonyPatch(typeof(TaiwuEventDomain), nameof(TaiwuEventDomain.SetDisplayingEventData))]
+internal static class InteractionHubReturnPatch
+{
+    [HarmonyPriority(Priority.First)]
+    private static bool Prefix(TaiwuEventDomain __instance, TaiwuEventDisplayData? value) =>
+        !InteractionHubReturnSession.TryCloseReturnedMenu(__instance, value);
+}

@@ -4,6 +4,7 @@
     <LangVersion>12</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TaiwuUi.Core</AssemblyName>
     <RootNamespace>TaiwuUi</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -24,6 +25,8 @@
     <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
     <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />
     <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="GameData.Serializer" HintPath="$(ManagedDir)\GameData.Serializer.dll" Private="false" />
+    <Reference Include="GameData.Shared" HintPath="$(ManagedDir)\GameData.Shared.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
     <Reference Include="UnityEngine.InputLegacyModule" HintPath="$(ManagedDir)\UnityEngine.InputLegacyModule.dll" Private="false" />
     <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(ManagedDir)\UnityEngine.TextRenderingModule.dll" Private="false" />

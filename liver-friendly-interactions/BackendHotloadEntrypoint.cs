@@ -14,4 +14,13 @@ public static class BackendHotloadEntrypoint
         harmony.CreateClassProcessor(typeof(AdventureForcedInteractionPatch)).Patch();
         return "Installed forced adventure-interaction suppression.";
     }
+
+    public static string InstallInteractionHub(string modId)
+    {
+        InteractionHubModMethods.Register(modId);
+        var harmony = new Harmony(HarmonyId + ".InteractionHub");
+        harmony.UnpatchSelf();
+        harmony.CreateClassProcessor(typeof(InteractionHubReturnPatch)).Patch();
+        return "Installed interaction hub backend for " + modId + ".";
+    }
 }

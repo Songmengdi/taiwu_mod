@@ -16,6 +16,8 @@ var selectButtons = new TaiwuSelection<string>(
     TaiwuSelectionMode.Single, new[] { "here" });
 var sheetTabs = new TaiwuSelection<string>(
     TaiwuSelectionMode.Single, new[] { "here" });
+var secondaryTabs = new TaiwuSelection<string>(
+    TaiwuSelectionMode.Single, new[] { "common" });
 var popupSelection = new TaiwuSelection<string>(
     TaiwuSelectionMode.Single, new[] { "sect" });
 var popupCard = new TaiwuPopupCardModel(
@@ -51,6 +53,33 @@ var tabs = new TaiwuTabsModel<string>(tabSelection, new[]
     new TaiwuTabItem<string>("home", "主页", TaiwuIcons.Home),
     new TaiwuTabItem<string>("world", "世界", TaiwuIcons.World),
 });
+var mapTabSelection = new TaiwuSelection<string>(
+    TaiwuSelectionMode.Single, new[] { "block" });
+var mapTabs = new TaiwuTabsModel<string>(mapTabSelection, new[]
+{
+    new TaiwuTabItem<string>("block", "当前地格", TaiwuIcons.MapCharacters),
+    new TaiwuTabItem<string>("companions", "同道", TaiwuIcons.MapEnemies),
+    new TaiwuTabItem<string>("merchants", "商人/商队", TaiwuIcons.MapCaravans),
+});
+var nativeMapTabs = Ui.MapIconTabs(mapTabs);
+var nativeMapTabsNode = (TabsNode)nativeMapTabs.Compile();
+Expect(nativeMapTabsNode.Height, 62f, "native map tabs reserve the original 62px strip");
+Expect(nativeMapTabsNode.MinimumItemWidth, 68f, "native map tab hit target width");
+Expect(nativeMapTabsNode.Spacing, 10f, "native map tab center spacing");
+
+var nativeCharacter = new TaiwuNativeCharacterCardData(
+    2995, "display-data", TaiwuNativeCharacterKind.Character);
+var nativeCharacterOptions = new TaiwuNativeCharacterCardOptions();
+Expect(nativeCharacter.CharacterId, 2995, "native character card keeps character identity");
+Expect(nativeCharacterOptions.Width, 320f, "native character card uses map-list width");
+Expect(nativeCharacterOptions.Height, 102f, "native character card uses map-list height");
+Expect(nativeCharacterOptions.EnableHotkeyTooltip, true,
+    "native character card enables Alt/Shift tooltip behavior by default");
+
+var nativeScrollOptions = new TaiwuNativeScrollOptions();
+Expect(nativeScrollOptions.ScrollSpeed, 2000f, "native scroll uses map-list wheel speed");
+Expect(nativeScrollOptions.ScrollbarWidth, 20f, "native scroll uses map-list scrollbar width");
+Expect(nativeScrollOptions.ViewportRightInset, 8f, "native scroll reserves map-list viewport inset");
 
 var navigation = new TaiwuNavigationModel<string>(
     new TaiwuSelection<string>(TaiwuSelectionMode.Single, new[] { "origin" }),
@@ -104,6 +133,11 @@ UiElement content = Ui.Column(
         new TaiwuChoiceOption<string>("here", "嵩山 76"),
         new TaiwuChoiceOption<string>("other", "然山 12"),
     }) with { Key = "sheet-tabs" },
+    Ui.SecondaryTabs(secondaryTabs, new[]
+    {
+        new TaiwuChoiceOption<string>("common", "常用"),
+        new TaiwuChoiceOption<string>("other", "其他"),
+    }) with { Key = "secondary-tabs" },
     Ui.PopupSelect("地域", popupSelection, new[]
     {
         new TaiwuChoiceOption<string>("sect", "门派地域"),
@@ -113,6 +147,7 @@ UiElement content = Ui.Column(
     Ui.Slider("年龄", slider, 0f, 100f) with { Key = "age" },
     Ui.RangeSlider("区域", range, 0f, 100f) with { Key = "region" },
     Ui.IconTabs(tabs) with { Key = "icons" },
+    nativeMapTabs with { Key = "map-icons" },
     Ui.Navigation(navigation) with { Key = "navigation" },
     Ui.Tabs(pageSelection, new[]
     {
@@ -134,7 +169,7 @@ UiValidationResult validation = TaiwuUiApi.Validate(window);
 Expect(validation.IsValid, true, "declarative window validates");
 Expect(validation.Errors.Count, 0, "declarative window errors");
 Expect(window.Key, "contract:declarative", "stable window key");
-Expect(((UiColumnElement)window.Content).Children.Count, 14, "public element tree");
+Expect(((UiColumnElement)window.Content).Children.Count, 16, "public element tree");
 Expect(bottomSelection.IsSelected("all"), false, "validation has no state side effects");
 
 var responsive = new UiWindow("contract", "responsive", Ui.Row(
@@ -186,6 +221,10 @@ tabSelection.Select("home");
 Expect(tabSelection.IsSelected("home"), true, "controlled tab selection");
 sheetTabs.Select("other");
 Expect(sheetTabs.IsSelected("other"), true, "controlled sheet-tab selection");
+secondaryTabs.Select("other");
+Expect(secondaryTabs.IsSelected("other"), true, "controlled secondary-tab selection");
+mapTabSelection.Select("merchants");
+Expect(mapTabSelection.IsSelected("merchants"), true, "controlled map-icon-tab selection");
 
 ExpectThrows<ArgumentException>(() => new TaiwuTabsModel<string>(
     new TaiwuSelection<string>(TaiwuSelectionMode.Multiple)),

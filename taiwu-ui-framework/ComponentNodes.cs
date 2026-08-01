@@ -328,20 +328,22 @@ internal sealed class ElementStateProjection : IDisposable
     }
 }
 
-internal enum TabsNodeStyle { Icon, Closable }
+internal enum TabsNodeStyle { Icon, Closable, MapIcon }
 
 internal sealed class TabsNode(
     ElementStateProjection projection,
     TabsNodeStyle style,
     float height,
     float minimumItemWidth,
-    bool showClearButton = false) : UiNode
+    bool showClearButton = false,
+    float spacing = 0f) : UiNode
 {
     internal ElementStateProjection Projection { get; } = projection;
     internal TabsNodeStyle Style { get; } = style;
     internal float Height { get; } = height;
     internal float MinimumItemWidth { get; } = minimumItemWidth;
     internal bool ShowClearButton { get; } = showClearButton;
+    internal float Spacing { get; } = spacing;
 }
 
 internal sealed class TabPageNode(List<UiNode> children)
@@ -415,6 +417,7 @@ internal enum ChoiceGroupAppearance
 {
     Filter,
     SheetTab,
+    SecondaryTab,
 }
 
 internal sealed class ChoiceGroupNode(

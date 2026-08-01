@@ -4,17 +4,45 @@ using TaiwuModdingLib.Core.Plugin;
 
 namespace LiverFriendlyInteractions.Frontend;
 
-[PluginConfig("LiverFriendlyInteractions.Frontend", "SMD", "0.8.4")]
+[PluginConfig("LiverFriendlyInteractions.Frontend", "SMD", "0.9.0")]
 public sealed class FrontendPlugin : TaiwuRemakePlugin
 {
+    internal static string ModId { get; private set; } = string.Empty;
+
     public override void Initialize()
     {
+        ModId = ModIdStr;
         FrontendRuntime.Install(GetGuid());
+        InteractionHubRuntime.Install();
     }
 
     public override void Dispose()
     {
+        InteractionHubRuntime.Uninstall();
         FrontendRuntime.Uninstall();
+    }
+
+    internal static void InstallInteractionHub(string modId)
+    {
+        ModId = modId;
+        InteractionHubRuntime.Install();
+    }
+}
+
+public static class InteractionHubHotloadEntrypoint
+{
+    public static string Install(string modId)
+    {
+        UnityEngine.GameObject? existing = UnityEngine.GameObject.Find("LiverFriendlyInteractions_InteractionHub");
+        if (existing != null) UnityEngine.Object.Destroy(existing);
+        FrontendPlugin.InstallInteractionHub(modId);
+        return "Installed interaction hub frontend for " + modId + ".";
+    }
+
+    public static string Open()
+    {
+        InteractionHubRuntime.Open();
+        return "Opened interaction hub.";
     }
 }
 

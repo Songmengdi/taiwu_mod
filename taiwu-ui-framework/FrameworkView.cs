@@ -714,38 +714,28 @@ internal sealed class FrameworkView : UIBase
         tabsLayout.childForceExpandWidth = true;
         tabsLayout.childForceExpandHeight = true;
 
-        var tabImages = new List<CImage>();
-        var tabButtons = new List<CButton>();
+        var tabVisuals = new List<TaiwuSecondaryTabVisual>();
         ChoiceSnapshot initial = node.Projection.Snapshot<ChoiceSnapshot>();
         for (int index = 0; index < initial.Items.Count; index++)
         {
             int captured = index;
-            RectTransform tab = CreateRect(
-                "Tab_" + index, tabs, Vector2.zero, Vector2.one, Vector2.zero);
-            LayoutElement layout = tab.gameObject.AddComponent<LayoutElement>();
+            TaiwuSecondaryTabVisual tab = TaiwuSecondaryTabVisual.Create(
+                tabs, "Tab_" + index, initial.Items[index].Label, 24f, Theme,
+                () => node.Projection.Dispatch(new SelectChoiceIntent(captured)));
+            LayoutElement layout = tab.Root.gameObject.AddComponent<LayoutElement>();
             layout.minWidth = 72f;
             layout.flexibleWidth = 1f;
-            CImage image = tab.gameObject.AddComponent<CImage>();
-            CButton button = tab.gameObject.AddComponent<CButton>();
-            button.targetGraphic = image;
-            button.onClick.AddListener(() => node.Projection.Dispatch(new SelectChoiceIntent(captured)));
-            TextMeshProUGUI label = CreateText(
-                "Label", tab, initial.Items[index].Label, 24f,
-                TextAlignmentOptions.Center, TaiwuTextStyle.Body);
-            SetRect(label.rectTransform, Vector2.zero, Vector2.one,
-                new Vector2(6f, 0f), new Vector2(-6f, 0f));
             if (index < initial.Items.Count - 1)
             {
                 RectTransform line = CreateRect(
-                    "RightLine", tab, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                    "RightLine", tab.Root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                     new Vector2(2f, node.Options.TabHeight * 0.5f));
                 line.pivot = new Vector2(1f, 0.5f);
                 CImage lineImage = line.gameObject.AddComponent<CImage>();
                 Theme.ApplySecondaryTabDivider(lineImage);
                 lineImage.raycastTarget = false;
             }
-            tabImages.Add(image);
-            tabButtons.Add(button);
+            tabVisuals.Add(tab);
         }
 
         RectTransform pageHost = CreateRect(
@@ -775,11 +765,10 @@ internal sealed class FrameworkView : UIBase
         void Refresh()
         {
             ChoiceSnapshot snapshot = node.Projection.Snapshot<ChoiceSnapshot>();
-            for (int index = 0; index < tabImages.Count; index++)
+            for (int index = 0; index < tabVisuals.Count; index++)
             {
                 bool selected = snapshot.Items[index].Selected;
-                tabButtons[index].interactable = snapshot.Items[index].Interactable;
-                Theme.ApplySecondaryTab(tabImages[index], tabButtons[index], selected);
+                tabVisuals[index].SetState(selected, snapshot.Items[index].Interactable);
                 pages[index].gameObject.SetActive(selected);
             }
         }

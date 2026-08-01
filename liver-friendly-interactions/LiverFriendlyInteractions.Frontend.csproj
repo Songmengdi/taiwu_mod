@@ -4,42 +4,68 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyName>LiverFriendlyInteractions.Frontend</AssemblyName>
     <RootNamespace>LiverFriendlyInteractions.Frontend</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>mod\Plugins</OutputPath>
-    <Version>0.8.4</Version>
-    <AssemblyVersion>0.8.4.0</AssemblyVersion>
-    <FileVersion>0.8.4.0</FileVersion>
+    <Version>0.9.0</Version>
+    <AssemblyVersion>0.9.0.0</AssemblyVersion>
+    <FileVersion>0.9.0.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\The Scroll Of Taiwu</GameDir>
     <ManagedDir>$(GameDir)\The Scroll of Taiwu_Data\Managed</ManagedDir>
     <LocalModDir>$(GameDir)\Mod\护肝交互</LocalModDir>
+    <TaiwuUiCoreDll Condition="'$(TaiwuUiCoreDll)' == ''">$(MSBuildProjectDirectory)\..\taiwu-ui-framework\mod\Plugins\TaiwuUi.Core.dll</TaiwuUiCoreDll>
   </PropertyGroup>
 
   <ItemGroup>
+    <InteractionIcon Include="Assets\InteractionIcons\*.png" />
     <Compile Include="FrontendPlugin.cs" />
     <Compile Include="AdventureNumberShortcutPatch.cs" />
     <Compile Include="AdventureNumberShortcutPolicy.cs" />
     <Compile Include="WorldMapAdventureShortcutPatch.cs" />
+    <Compile Include="InteractionHubModels.cs" />
+    <Compile Include="InteractionHubPolicy.cs" />
+    <Compile Include="InteractionHubWorldMapFocusPolicy.cs" />
+    <Compile Include="InteractionHubBackendClient.cs" />
+    <Compile Include="InteractionHubPreferences.cs" />
+    <Compile Include="InteractionHubNativeCharacterCard.cs" />
+    <Compile Include="InteractionHubNativeActionCard.cs" />
+    <Compile Include="InteractionHubSettingsWindow.cs" />
+    <Compile Include="InteractionHubWindow.cs" />
+    <Compile Include="IsExternalInit.cs" />
     <Reference Include="0Harmony" HintPath="$(ManagedDir)\0Harmony.dll" Private="false" />
     <Reference Include="TaiwuModdingLib" HintPath="$(ManagedDir)\TaiwuModdingLib.dll" Private="false" />
     <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
     <Reference Include="GameData.Adventure" HintPath="$(ManagedDir)\GameData.Adventure.dll" Private="false" />
     <Reference Include="GameData.Shared" HintPath="$(ManagedDir)\GameData.Shared.dll" Private="false" />
+    <Reference Include="GameData.Serializer" HintPath="$(ManagedDir)\GameData.Serializer.dll" Private="false" />
+    <Reference Include="GameData.Utilities" HintPath="$(ManagedDir)\GameData.Utilities.dll" Private="false" />
+    <Reference Include="TaiwuUi.Core" HintPath="$(TaiwuUiCoreDll)" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
     <Reference Include="UnityEngine.InputLegacyModule" HintPath="$(ManagedDir)\UnityEngine.InputLegacyModule.dll" Private="false" />
+    <Reference Include="UnityEngine.ImageConversionModule" HintPath="$(ManagedDir)\UnityEngine.ImageConversionModule.dll" Private="false" />
     <Reference Include="UnityEngine.UI" HintPath="$(ManagedDir)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="UnityEngine.UIModule" HintPath="$(ManagedDir)\UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(ManagedDir)\UnityEngine.TextRenderingModule.dll" Private="false" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)\Unity.TextMeshPro.dll" Private="false" />
   </ItemGroup>
+
+  <Target Name="CopyInteractionIconsToPackage" AfterTargets="Build">
+    <MakeDir Directories="$(MSBuildProjectDirectory)\mod\Assets\InteractionIcons" />
+    <Copy SourceFiles="@(InteractionIcon)"
+          DestinationFolder="$(MSBuildProjectDirectory)\mod\Assets\InteractionIcons" />
+  </Target>
 
   <Target Name="DeployLocalMod" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
     <MakeDir Directories="$(LocalModDir)\Plugins" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\Config.lua" DestinationFolder="$(LocalModDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(LocalModDir)\Plugins" />
+    <MakeDir Directories="$(LocalModDir)\Assets\InteractionIcons" />
+    <Copy SourceFiles="@(InteractionIcon)" DestinationFolder="$(LocalModDir)\Assets\InteractionIcons" />
   </Target>
 </Project>

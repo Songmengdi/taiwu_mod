@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'LiverFriendlyInteractions.Backend'">
+    <BaseIntermediateOutputPath>obj\backend\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj\backend\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'LiverFriendlyInteractions.Frontend'">
+    <BaseIntermediateOutputPath>obj\frontend\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj\frontend\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'LiverFriendlyInteractions.Tests'">
+    <BaseIntermediateOutputPath>obj\tests\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj\tests\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>

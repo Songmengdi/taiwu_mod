@@ -7,9 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="obj\**\*.cs" />
     <Compile Include="..\MarketIntroPolicy.cs" Link="MarketIntroPolicy.cs" />
     <Compile Include="..\MeditationRestPolicy.cs" Link="MeditationRestPolicy.cs" />
     <Compile Include="..\AdventureNumberShortcutPolicy.cs" Link="AdventureNumberShortcutPolicy.cs" />
     <Compile Include="..\AdventureForcedInteractionPolicy.cs" Link="AdventureForcedInteractionPolicy.cs" />
+    <Compile Include="..\InteractionHubModels.cs" Link="InteractionHubModels.cs" />
+    <Compile Include="..\InteractionHubPolicy.cs" Link="InteractionHubPolicy.cs" />
+    <Compile Include="..\InteractionHubWorldMapFocusPolicy.cs" Link="InteractionHubWorldMapFocusPolicy.cs" />
+    <Compile Include="..\InteractionHubReturnPolicy.cs" Link="InteractionHubReturnPolicy.cs" />
+    <Compile Include="..\InteractionHubBeginPolicy.cs" Link="InteractionHubBeginPolicy.cs" />
+    <Compile Include="..\InteractionHubGroupingPolicy.cs" Link="InteractionHubGroupingPolicy.cs" />
   </ItemGroup>
 </Project>

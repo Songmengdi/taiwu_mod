@@ -9,12 +9,24 @@ internal static class FrameworkNavigationRenderer
 {
     internal static void RenderTabs(Transform parent, TabsNode node, TaiwuTheme theme)
     {
+        if (node.Style == TabsNodeStyle.MapIcon)
+        {
+            RenderMapIconTabs(parent, node, theme);
+            return;
+        }
+
         RectTransform root = UiFactory.Rect(
-            node.Style == TabsNodeStyle.Icon ? "IconTabs" : "ClosableTabs", parent);
+            node.Style switch
+            {
+                TabsNodeStyle.Icon => "IconTabs",
+                _ => "ClosableTabs",
+            }, parent);
         UiFactory.Layout(root, -1f, node.Height, flexibleWidth: 1f);
-        RectTransform itemsRoot = node.Style == TabsNodeStyle.Icon
-            ? BuildIconTabsContainer(root)
-            : BuildClosableTabsViewport(root, node, theme);
+        RectTransform itemsRoot = node.Style switch
+        {
+            TabsNodeStyle.Icon => BuildIconTabsContainer(root),
+            _ => BuildClosableTabsViewport(root, node, theme),
+        };
 
         void Refresh()
         {
@@ -22,10 +34,15 @@ internal static class FrameworkNavigationRenderer
             ClearChildren(itemsRoot);
             for (int index = 0; index < snapshot.Items.Count; index++)
             {
-                if (node.Style == TabsNodeStyle.Icon)
-                    BuildIconTab(itemsRoot, node, snapshot, index, theme);
-                else
-                    BuildClosableTab(itemsRoot, node, snapshot, index, theme);
+                switch (node.Style)
+                {
+                    case TabsNodeStyle.Icon:
+                        BuildIconTab(itemsRoot, node, snapshot, index, theme);
+                        break;
+                    default:
+                        BuildClosableTab(itemsRoot, node, snapshot, index, theme);
+                        break;
+                }
             }
         }
 
@@ -45,6 +62,70 @@ internal static class FrameworkNavigationRenderer
         layout.childForceExpandWidth = true;
         layout.childForceExpandHeight = true;
         return root;
+    }
+
+    private static void RenderMapIconTabs(Transform parent, TabsNode node, TaiwuTheme theme)
+    {
+        RectTransform root = UiFactory.Rect("MapIconTabs", parent);
+        UiFactory.Layout(root, -1f, node.Height, flexibleWidth: 1f);
+        CToggleGroup group = root.gameObject.AddComponent<CToggleGroup>();
+        group.allowSwitchOff = false;
+        group.allowUncheck = false;
+
+        RectTransform back = UiFactory.Rect("Back", root);
+        back.anchorMin = back.anchorMax = new Vector2(0f, 0.5f);
+        back.pivot = new Vector2(0f, 0.5f);
+        // Match ViewMapBlockCharList/Selector: Back starts after the selector's
+        // 12px left padding, while the overlapping toggle strip starts 5px in.
+        back.anchoredPosition = new Vector2(12f, 0f);
+        CImage backImage = back.gameObject.AddComponent<CImage>();
+        theme.ApplyMapIconTabsBack(backImage);
+
+        RectTransform strip = UiFactory.Rect("Tweak", root);
+        strip.anchorMin = strip.anchorMax = new Vector2(0f, 0.5f);
+        strip.pivot = new Vector2(0f, 0.5f);
+        strip.anchoredPosition = new Vector2(17f, 0f);
+        var layout = strip.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.spacing = node.Spacing;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = false;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = true;
+
+        void Select(int next, int _)
+        {
+            if (next >= 0)
+                node.Projection.Dispatch(new SelectTabIntent(next));
+        }
+
+        void Refresh()
+        {
+            TabsSnapshot snapshot = node.Projection.Snapshot<TabsSnapshot>();
+            group.Clear();
+            ClearChildren(strip);
+            float stripWidth = snapshot.Items.Count == 0
+                ? 0f
+                : snapshot.Items.Count * node.MinimumItemWidth +
+                  (snapshot.Items.Count - 1) * node.Spacing;
+            back.sizeDelta = new Vector2(stripWidth + 10f, 52f);
+            strip.sizeDelta = new Vector2(stripWidth, node.Height);
+            int selectedIndex = -1;
+            for (int index = 0; index < snapshot.Items.Count; index++)
+            {
+                if (snapshot.Items[index].Selected)
+                    selectedIndex = index;
+                BuildMapIconToggle(strip, node, snapshot, index, group, theme);
+            }
+            group.Init(selectedIndex);
+        }
+
+        group.OnActiveIndexChange += Select;
+        node.Projection.Changed += Refresh;
+        UiFactory.Lifetime(root).Add(() => group.OnActiveIndexChange -= Select);
+        UiFactory.Lifetime(root).Add(() => node.Projection.Changed -= Refresh);
+        UiFactory.Lifetime(root).Add(node.Projection.Dispose);
+        Refresh();
     }
 
     private static RectTransform BuildClosableTabsViewport(
@@ -205,6 +286,50 @@ internal static class FrameworkNavigationRenderer
             line.anchoredPosition = Vector2.zero;
             line.gameObject.AddComponent<CImage>().color = new Color(0.76f, 0.24f, 0.22f, 1f);
         }
+    }
+
+    private static void BuildMapIconToggle(
+        RectTransform parent,
+        TabsNode node,
+        TabsSnapshot snapshot,
+        int index,
+        CToggleGroup group,
+        TaiwuTheme theme)
+    {
+        TabItemSnapshot state = snapshot.Items[index];
+        RectTransform item = UiFactory.Rect("Tab_" + index, parent);
+        item.sizeDelta = new Vector2(node.MinimumItemWidth, 52f);
+        LayoutElement itemLayout = UiFactory.Layout(
+            item, node.MinimumItemWidth, 52f, flexibleWidth: 0f);
+        itemLayout.minWidth = node.MinimumItemWidth;
+        itemLayout.minHeight = 52f;
+
+        RectTransform lineRoot = UiFactory.Rect("Line", item);
+        lineRoot.anchorMin = lineRoot.anchorMax = new Vector2(1f, 0.5f);
+        lineRoot.pivot = new Vector2(1f, 0.5f);
+        lineRoot.sizeDelta = new Vector2(2f, 36f);
+        lineRoot.anchoredPosition = new Vector2(5f, 0f);
+        CImage line = lineRoot.gameObject.AddComponent<CImage>();
+        lineRoot.gameObject.SetActive(index < snapshot.Items.Count - 1);
+
+        RectTransform backgroundRoot = UiFactory.Rect("Background", item);
+        backgroundRoot.anchorMin = backgroundRoot.anchorMax = new Vector2(0.5f, 0.5f);
+        backgroundRoot.pivot = new Vector2(0.5f, 0.5f);
+        backgroundRoot.sizeDelta = new Vector2(78f, 52f);
+        CImage background = backgroundRoot.gameObject.AddComponent<CImage>();
+
+        RectTransform checkmarkRoot = UiFactory.Rect("Checkmark", backgroundRoot);
+        UiFactory.Stretch(checkmarkRoot, Vector2.zero, Vector2.zero);
+        CImage checkmark = checkmarkRoot.gameObject.AddComponent<CImage>();
+        checkmark.raycastTarget = false;
+
+        CToggle toggle = item.gameObject.AddComponent<CToggle>();
+        toggle.targetGraphic = background;
+        toggle.graphic = checkmark;
+        toggle.interactable = state.Interactable;
+        toggle.isOn = state.Selected;
+        theme.ApplyMapIconTab(background, checkmark, line, toggle, state.Icon);
+        group.Add(toggle);
     }
 
     private static void BuildClosableTab(

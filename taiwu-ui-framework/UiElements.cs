@@ -176,6 +176,24 @@ public sealed record UiSheetTabsElement<T>(
     }
 }
 
+/// <summary>
+/// A full-width native second-level tab strip, matching the attribute/injury tabs
+/// used by character-detail pages.
+/// </summary>
+public sealed record UiSecondaryTabsElement<T>(
+    TaiwuSelection<T> Selection,
+    IReadOnlyList<TaiwuChoiceOption<T>> Items) : UiElement
+{
+    internal override UiNode Compile()
+    {
+        if (Selection.Mode != TaiwuSelectionMode.Single)
+            throw new ArgumentException("Secondary tabs require single selection.", nameof(Selection));
+        return new ChoiceGroupNode(string.Empty,
+            ElementStateProjection.Choices(Selection, Items), compact: true, selectOnly: true,
+            appearance: ChoiceGroupAppearance.SecondaryTab);
+    }
+}
+
 /// <summary>A single-selection button that opens a native-styled floating choice panel.</summary>
 public sealed record UiPopupSelectElement<T>(
     string Label,
@@ -213,6 +231,19 @@ public sealed record UiIconTabsElement<T>(
     internal override UiNode Compile() => new TabsNode(
         ElementStateProjection.Tabs(Model), TabsNodeStyle.Icon,
         Options.Height, Options.MinimumItemWidth);
+}
+
+/// <summary>
+/// Compact icon-only tabs using the native world-map character-list chrome.
+/// Icons are semantic <see cref="TaiwuIcon"/> tokens resolved inside the framework.
+/// </summary>
+public sealed record UiMapIconTabsElement<T>(
+    TaiwuTabsModel<T> Model,
+    TaiwuMapIconTabsOptions Options) : UiElement
+{
+    internal override UiNode Compile() => new TabsNode(
+        ElementStateProjection.Tabs(Model), TabsNodeStyle.MapIcon,
+        Options.Height, Options.ItemWidth, spacing: Options.Spacing);
 }
 
 public sealed record UiClosableTabsElement<T>(
@@ -421,6 +452,8 @@ public static class Ui
         bool compact = false) => new(selection, items, compact);
     public static UiSheetTabsElement<T> SheetTabs<T>(
         TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items) => new(selection, items);
+    public static UiSecondaryTabsElement<T> SecondaryTabs<T>(
+        TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items) => new(selection, items);
     public static UiPopupSelectElement<T> PopupSelect<T>(
         string label, TaiwuSelection<T> selection, IReadOnlyList<TaiwuChoiceOption<T>> items,
         TaiwuPopupSelectOptions? options = null) =>
@@ -432,6 +465,9 @@ public static class Ui
     public static UiIconTabsElement<T> IconTabs<T>(
         TaiwuTabsModel<T> model, TaiwuIconTabsOptions? options = null) =>
         new(model, options ?? new TaiwuIconTabsOptions());
+    public static UiMapIconTabsElement<T> MapIconTabs<T>(
+        TaiwuTabsModel<T> model, TaiwuMapIconTabsOptions? options = null) =>
+        new(model, options ?? new TaiwuMapIconTabsOptions());
     public static UiClosableTabsElement<T> ClosableTabs<T>(
         TaiwuTabsModel<T> model, TaiwuClosableTabsOptions? options = null) =>
         new(model, options ?? new TaiwuClosableTabsOptions());

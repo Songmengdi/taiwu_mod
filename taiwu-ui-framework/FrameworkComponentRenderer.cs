@@ -719,6 +719,11 @@ internal static class FilterFamilyModule
 {
     internal static void RenderChoices(Transform parent, ChoiceGroupNode node, TaiwuTheme theme)
     {
+        if (node.Appearance == ChoiceGroupAppearance.SecondaryTab)
+        {
+            RenderSecondaryTabs(parent, node, theme);
+            return;
+        }
         bool sheetTab = node.Appearance == ChoiceGroupAppearance.SheetTab;
         RectTransform root = UiFactory.Rect("ChoiceGroup", parent);
         var vertical = root.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -848,6 +853,60 @@ internal static class FilterFamilyModule
                     snapshot.Items[index].Interactable,
                     node.Appearance,
                     theme);
+        }
+
+        node.Projection.Changed += Refresh;
+        UiFactory.Lifetime(root).Add(() => node.Projection.Changed -= Refresh);
+        UiFactory.Lifetime(root).Add(node.Projection.Dispose);
+        Refresh();
+    }
+
+    private static void RenderSecondaryTabs(
+        Transform parent,
+        ChoiceGroupNode node,
+        TaiwuTheme theme)
+    {
+        RectTransform root = UiFactory.Rect("SecondaryTabs", parent);
+        UiFactory.Layout(root, -1f, 48f, flexibleWidth: 1f);
+        CImage background = root.gameObject.AddComponent<CImage>();
+        theme.ApplySecondaryTabsBackground(background);
+        var layout = root.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.spacing = 0f;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = true;
+
+        ChoiceSnapshot initial = node.Projection.Snapshot<ChoiceSnapshot>();
+        var tabs = new List<TaiwuSecondaryTabVisual>();
+        for (int index = 0; index < initial.Items.Count; index++)
+        {
+            int captured = index;
+            TaiwuSecondaryTabVisual tab = TaiwuSecondaryTabVisual.Create(
+                root, "Tab_" + index, initial.Items[index].Label, 28f, theme,
+                () => node.Projection.Dispatch(new SelectChoiceIntent(captured)));
+            LayoutElement tabLayout = UiFactory.Layout(tab.Root, 72f, 48f, flexibleWidth: 1f);
+            tabLayout.minWidth = 72f;
+            if (index < initial.Items.Count - 1)
+            {
+                RectTransform divider = UiFactory.Rect("Divider", tab.Root);
+                divider.anchorMin = new Vector2(1f, 0.5f);
+                divider.anchorMax = new Vector2(1f, 0.5f);
+                divider.pivot = new Vector2(1f, 0.5f);
+                divider.sizeDelta = new Vector2(2f, 32f);
+                theme.ApplySecondaryTabDivider(divider.gameObject.AddComponent<CImage>());
+            }
+            tabs.Add(tab);
+        }
+
+        void Refresh()
+        {
+            ChoiceSnapshot snapshot = node.Projection.Snapshot<ChoiceSnapshot>();
+            for (int index = 0; index < tabs.Count; index++)
+                tabs[index].SetState(
+                    snapshot.Items[index].Selected,
+                    snapshot.Items[index].Interactable);
         }
 
         node.Projection.Changed += Refresh;

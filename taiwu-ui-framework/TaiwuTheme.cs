@@ -9,6 +9,7 @@ internal sealed class TaiwuTheme
 {
     private static TaiwuTheme? _cached;
     private readonly Dictionary<string, Sprite> _sprites;
+    private readonly Dictionary<string, Sprite[]> _spriteVariants;
     private readonly Dictionary<string, Texture> _textures;
 
     internal TMP_FontAsset? Font { get; }
@@ -20,10 +21,12 @@ internal sealed class TaiwuTheme
     private TaiwuTheme(
         TMP_FontAsset? font,
         Dictionary<string, Sprite> sprites,
+        Dictionary<string, Sprite[]> spriteVariants,
         Dictionary<string, Texture> textures)
     {
         Font = font;
         _sprites = sprites;
+        _spriteVariants = spriteVariants;
         _textures = textures;
     }
 
@@ -36,15 +39,21 @@ internal sealed class TaiwuTheme
             ?? Resources.FindObjectsOfTypeAll<TextMeshProUGUI>()
                 .FirstOrDefault(text => text.gameObject.activeInHierarchy && text.font != null)?.font
             ?? fonts.FirstOrDefault();
-        Dictionary<string, Sprite> sprites = Resources.FindObjectsOfTypeAll<Sprite>()
+        Sprite[] loadedSprites = Resources.FindObjectsOfTypeAll<Sprite>()
             .Where(sprite => sprite != null && !sprite.name.EndsWith("(Clone)", StringComparison.Ordinal))
+            .ToArray();
+        Dictionary<string, Sprite[]> spriteVariants = loadedSprites
             .GroupBy(sprite => sprite.name)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            .ToDictionary(group => group.Key, group => group
+                .OrderByDescending(sprite => sprite.rect.width)
+                .ToArray(), StringComparer.Ordinal);
+        Dictionary<string, Sprite> sprites = spriteVariants
+            .ToDictionary(pair => pair.Key, pair => pair.Value[0], StringComparer.Ordinal);
         Dictionary<string, Texture> textures = Resources.FindObjectsOfTypeAll<Texture>()
             .Where(texture => texture != null && !string.IsNullOrEmpty(texture.name))
             .GroupBy(texture => texture.name)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        return new TaiwuTheme(font, sprites, textures);
+        return new TaiwuTheme(font, sprites, spriteVariants, textures);
     }
 
     internal void ApplyEncyclopediaBackground(CRawImage image)
@@ -176,13 +185,32 @@ internal sealed class TaiwuTheme
         image.color = image.sprite == null ? new Color(0.06f, 0.10f, 0.10f, 0.94f) : Color.white;
     }
 
-    internal void ApplySecondaryTab(CImage image, CButton button, bool selected)
+    internal void ApplySecondaryTabLayers(
+        CImage background,
+        CImage hover,
+        CImage checkmark)
     {
-        Sprite? normal = selected ? Find("ui9_btn_second_toggle_2") : null;
-        image.sprite = normal;
-        image.type = Image.Type.Sliced;
-        image.color = normal == null ? Color.clear : Color.white;
-        button.transition = Selectable.Transition.None;
+        Sprite? selectedSprite = Find("ui9_btn_second_tap_0", 80f)
+            ?? Find("ui9_btn_second_toggle_2");
+        // The native hover frame is an 18px-wide sliced sprite. Filtering it
+        // by rendered tab width incorrectly falls back to the red checkmark.
+        Sprite? hoverSprite = Find("ui9_btn_second_tap_1") ?? selectedSprite;
+        background.sprite = null;
+        background.type = Image.Type.Sliced;
+        background.color = Color.clear;
+        background.raycastTarget = true;
+        hover.sprite = hoverSprite;
+        hover.type = Image.Type.Sliced;
+        hover.color = hoverSprite == null
+            ? new Color(0.82f, 0.72f, 0.49f, 0.8f)
+            : Color.white;
+        hover.raycastTarget = false;
+        checkmark.sprite = selectedSprite;
+        checkmark.type = Image.Type.Sliced;
+        checkmark.color = selectedSprite == null
+            ? new Color(0.48f, 0.08f, 0.07f, 0.96f)
+            : Color.white;
+        checkmark.raycastTarget = false;
     }
 
     internal void ApplySecondaryTabDivider(CImage image)
@@ -190,6 +218,60 @@ internal sealed class TaiwuTheme
         image.sprite = Find("ui9_btn_second_tap_2") ?? Find("ui9_line_vertical_1");
         image.type = Image.Type.Sliced;
         image.color = image.sprite == null ? DividerColor : Color.white;
+    }
+
+    internal void ApplyMapIconTabsBack(CImage image)
+    {
+        image.sprite = Find("ui9_back_menu");
+        image.type = Image.Type.Sliced;
+        image.raycastTarget = false;
+        image.color = image.sprite == null
+            ? new Color(0.05f, 0.09f, 0.09f, 0.96f)
+            : Color.white;
+    }
+
+    internal void ApplyMapIconTab(
+        CImage background,
+        CImage checkmark,
+        CImage line,
+        CToggle toggle,
+        TaiwuIcon? icon)
+    {
+        string stem = icon?.Key switch
+        {
+            "map-characters" => "ui9_btn_map_block_character_list_character_big_",
+            "map-enemies" => "ui9_btn_map_block_character_list_enemy_big_",
+            "map-caravans" => "ui9_btn_map_block_character_list_caravan_big_",
+            "map-tombs" => "ui9_btn_map_block_character_list_tomb_big_",
+            _ => "ui9_btn_map_block_character_list_character_big_",
+        };
+        Sprite? normal = Find(stem + "0", 60f);
+        Sprite? hover = Find(stem + "1", 60f) ?? normal;
+        Sprite? selectedSprite = Find(stem + "2", 60f) ?? hover;
+        Sprite? disabled = Find(stem + "3", 60f) ?? normal;
+        background.sprite = normal;
+        background.type = Image.Type.Simple;
+        background.color = background.sprite == null
+            ? new Color(0.10f, 0.17f, 0.18f, 1f)
+            : Color.white;
+        checkmark.sprite = selectedSprite;
+        checkmark.type = Image.Type.Simple;
+        checkmark.color = selectedSprite == null
+            ? new Color(0.30f, 0.64f, 0.72f, 1f)
+            : Color.white;
+        line.sprite = Find("ui9_back_progressbar_line_0");
+        line.type = Image.Type.Sliced;
+        line.raycastTarget = false;
+        line.color = line.sprite == null ? DividerColor : Color.white;
+        toggle.toggleTransition = Toggle.ToggleTransition.Fade;
+        toggle.transition = Selectable.Transition.SpriteSwap;
+        toggle.spriteState = new SpriteState
+        {
+            highlightedSprite = hover,
+            pressedSprite = null,
+            selectedSprite = null,
+            disabledSprite = disabled,
+        };
     }
 
     internal void ApplyBottomTabsBackground(CImage image)
@@ -714,13 +796,11 @@ internal sealed class TaiwuTheme
     /// Atlas packs reuse some sprite names for unrelated artworks (for example
     /// ui9_btn_second_tap_2 is both a 2x8 divider line and the 88x52 highlighted
     /// tab background), and the name-only dictionary picks one arbitrarily.
-    /// This overload scans every loaded sprite with the name and returns the
-    /// widest one meeting the minimum width.
+    /// This overload selects from variants captured during theme creation. It
+    /// must not rescan all Unity resources while rendering each tab.
     /// </summary>
     private Sprite? Find(string name, float minimumWidth) =>
-        Resources.FindObjectsOfTypeAll<Sprite>()
-            .Where(sprite => sprite != null && sprite.name == name &&
-                sprite.rect.width >= minimumWidth)
-            .OrderByDescending(sprite => sprite.rect.width)
-            .FirstOrDefault();
+        _spriteVariants.TryGetValue(name, out Sprite[]? variants)
+            ? variants.FirstOrDefault(sprite => sprite.rect.width >= minimumWidth)
+            : null;
 }

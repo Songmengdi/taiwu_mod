@@ -23,6 +23,7 @@ publish/
 mod/Plugins/*.dll
 mod/Plugins/*.pdb
 mod/Plugins/*.deps.json
+liver-friendly-interactions/mod/Assets/
 sample/mod/Plugins/
 dev/hot*/
 taiwu-probe-dual/Plugins/

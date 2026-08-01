@@ -27,6 +27,10 @@ public static class TaiwuIcons
     public static TaiwuIcon Items { get; } = new("items");
     public static TaiwuIcon Travel { get; } = new("travel");
     public static TaiwuIcon Extensions { get; } = new("extensions");
+    public static TaiwuIcon MapCharacters { get; } = new("map-characters");
+    public static TaiwuIcon MapEnemies { get; } = new("map-enemies");
+    public static TaiwuIcon MapCaravans { get; } = new("map-caravans");
+    public static TaiwuIcon MapTombs { get; } = new("map-tombs");
 }
 
 public sealed record TaiwuTabItem<T>(
@@ -170,6 +174,14 @@ public sealed record TaiwuIconTabsOptions
 {
     public float Height { get; init; } = 104f;
     public float MinimumItemWidth { get; init; } = 118f;
+}
+
+/// <summary>Measurements for the compact icon strip used by the world-map character list.</summary>
+public sealed record TaiwuMapIconTabsOptions
+{
+    public float Height { get; init; } = 62f;
+    public float ItemWidth { get; init; } = 68f;
+    public float Spacing { get; init; } = 10f;
 }
 
 public sealed record TaiwuClosableTabsOptions

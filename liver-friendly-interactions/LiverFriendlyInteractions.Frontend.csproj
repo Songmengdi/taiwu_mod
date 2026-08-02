@@ -31,6 +31,8 @@
     <Compile Include="InteractionHubModels.cs" />
     <Compile Include="InteractionHubPolicy.cs" />
     <Compile Include="InteractionHubWorldMapFocusPolicy.cs" />
+    <Compile Include="InteractionHubTargetPolicy.cs" />
+    <Compile Include="WorldMapCharacterOverridePatch.cs" />
     <Compile Include="InteractionHubBackendClient.cs" />
     <Compile Include="InteractionHubPreferences.cs" />
     <Compile Include="InteractionHubNativeCharacterCard.cs" />

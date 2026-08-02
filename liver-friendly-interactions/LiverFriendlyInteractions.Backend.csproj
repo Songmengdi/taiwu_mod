@@ -29,6 +29,8 @@
     <Compile Remove="WorldMapAdventureShortcutPatch.cs" />
     <Compile Remove="InteractionHubModels.cs" />
     <Compile Remove="InteractionHubPolicy.cs" />
+    <Compile Remove="InteractionHubTargetPolicy.cs" />
+    <Compile Remove="WorldMapCharacterOverridePatch.cs" />
     <Compile Remove="InteractionHubBackendClient.cs" />
     <Compile Remove="InteractionHubPreferences.cs" />
     <Compile Remove="InteractionHubNativeCharacterCard.cs" />

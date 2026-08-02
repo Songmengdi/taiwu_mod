@@ -15,6 +15,7 @@
     <Compile Include="..\InteractionHubModels.cs" Link="InteractionHubModels.cs" />
     <Compile Include="..\InteractionHubPolicy.cs" Link="InteractionHubPolicy.cs" />
     <Compile Include="..\InteractionHubWorldMapFocusPolicy.cs" Link="InteractionHubWorldMapFocusPolicy.cs" />
+    <Compile Include="..\InteractionHubTargetPolicy.cs" Link="InteractionHubTargetPolicy.cs" />
     <Compile Include="..\InteractionHubReturnPolicy.cs" Link="InteractionHubReturnPolicy.cs" />
     <Compile Include="..\InteractionHubBeginPolicy.cs" Link="InteractionHubBeginPolicy.cs" />
     <Compile Include="..\InteractionHubGroupingPolicy.cs" Link="InteractionHubGroupingPolicy.cs" />

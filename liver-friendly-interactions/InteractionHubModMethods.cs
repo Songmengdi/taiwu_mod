@@ -9,12 +9,17 @@ internal static class InteractionHubModMethods
 {
     internal const string SnapshotMethod = "LiverFriendlyInteractions.InteractionHub.Snapshot.v2";
     internal const string BeginMethod = "LiverFriendlyInteractions.InteractionHub.Begin.v2";
+    internal const string MeetMethod = "LiverFriendlyInteractions.InteractionHub.Meet.v1";
 
     internal static void Register(string modId)
     {
         DomainManager.Mod.AddModMethod(modId, SnapshotMethod, Snapshot);
         DomainManager.Mod.AddModMethod(modId, BeginMethod, Begin);
+        DomainManager.Mod.AddModMethod(modId, MeetMethod, Meet);
     }
+
+    internal static void RegisterMeet(string modId) =>
+        DomainManager.Mod.AddModMethod(modId, MeetMethod, Meet);
 
     private static SerializableModData Snapshot(DataContext context, SerializableModData parameter) =>
         Safe(response =>
@@ -107,6 +112,21 @@ internal static class InteractionHubModMethods
                 InteractionHubReturnSession.Cancel();
                 throw;
             }
+        });
+
+    private static SerializableModData Meet(DataContext context, SerializableModData parameter) =>
+        Safe(response =>
+        {
+            int characterId = Required(parameter, "CharacterId");
+            int taiwuCharacterId = DomainManager.Taiwu.GetTaiwuCharId();
+            bool alreadyMet = DomainManager.Character.TryGetRelation(
+                characterId, taiwuCharacterId, out _);
+            if (!alreadyMet)
+                DomainManager.TaiwuEvent.MeetTaiwu(context, characterId);
+            bool met = DomainManager.Character.TryGetRelation(
+                characterId, taiwuCharacterId, out _);
+            response.Set("AlreadyMet", alreadyMet);
+            response.Set("Met", met);
         });
 
     private static void WritePerson(SerializableModData response, string prefix, HubPerson person)

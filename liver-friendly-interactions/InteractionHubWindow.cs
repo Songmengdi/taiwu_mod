@@ -15,6 +15,7 @@ internal sealed class InteractionHubWindow : MonoBehaviour
     private const string OwnerId = "LiverFriendlyInteractions";
     private const string WindowId = "InteractionHub";
     private const float NativeEventProbeIntervalSeconds = 0.05f;
+    private const float NativeUiTransitionGraceSeconds = 0.25f;
     private const float WorldMapFallbackGraceSeconds = 2f;
 
     private InteractionHubPreferences _preferences = null!;
@@ -30,12 +31,16 @@ internal sealed class InteractionHubWindow : MonoBehaviour
     private InteractionHubSnapshot? _snapshot;
     private int _selectedTargetId = -1;
     private InteractionPersonKind _selectedKind;
+    private int _requestedTargetId = -1;
+    private InteractionPersonKind _requestedKind;
+    private InteractionPersonGroup _requestedGroup;
     private bool _requesting;
     private bool _interactionPending;
     private bool _waitingForWorldMap;
     private bool _nativeEventObserved;
     private GameObject? _nativeEventWindow;
     private float _nativeEventWaitStartedAt;
+    private float _nativeEventClosedAt = -1f;
     private float _nextNativeEventProbeAt;
     private UIElement? _returnAfterElement;
     private bool _returnElementObserved;
@@ -68,6 +73,7 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         _personGroup.SelectionChanged += _ =>
         {
             SelectDefaultPerson();
+            ResolveActionTabForSelectedPerson();
             PopulatePeople();
             PopulateActions();
         };
@@ -121,11 +127,27 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         if (_waitingForWorldMap)
         {
             bool nativeEventActive = IsNativeEventWindowActive();
-            if (InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeEvent(nativeEventActive))
+            if (InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeFlow(
+                    _interactionPending, nativeEventActive))
                 _window?.Hide();
             _nativeEventObserved |= nativeEventActive;
-            bool nativeEventClosed = InteractionHubWorldMapFocusPolicy.ShouldReturnFromExternalUi(
-                _nativeEventObserved, nativeEventActive);
+            if (nativeEventActive)
+                _nativeEventClosedAt = -1f;
+            else if (_nativeEventObserved && _nativeEventClosedAt < 0f)
+                _nativeEventClosedAt = Time.unscaledTime;
+            bool transitionSettled = _nativeEventClosedAt >= 0f &&
+                Time.unscaledTime - _nativeEventClosedAt >= NativeUiTransitionGraceSeconds;
+            bool shouldInspectCompletion =
+                InteractionHubWorldMapFocusPolicy.ShouldInspectNativeFlowCompletion(
+                    _nativeEventObserved, nativeEventActive, transitionSettled);
+            bool shouldInspectWorldMap =
+                InteractionHubWorldMapFocusPolicy.ShouldInspectWorldMapAfterNativeFlow(
+                    shouldInspectCompletion,
+                    shouldInspectCompletion && IsNativeFlowExternalUiActive());
+            bool nativeEventClosed = shouldInspectWorldMap &&
+                InteractionHubWorldMapFocusPolicy.ShouldReturnFromNativeFlow(
+                    _nativeEventObserved, nativeEventActive,
+                    transitionSettled, externalPopupActive: false, HasActiveWorldMap());
             bool worldMapReturned = InteractionHubWorldMapFocusPolicy.ShouldCheckWorldMapFallback(
                 _nativeEventObserved,
                 Time.unscaledTime - _nativeEventWaitStartedAt,
@@ -135,6 +157,7 @@ internal sealed class InteractionHubWindow : MonoBehaviour
                 _waitingForWorldMap = false;
                 _nativeEventObserved = false;
                 _nativeEventWindow = null;
+                _nativeEventClosedAt = -1f;
                 _interactionPending = false;
                 RefreshAndShow();
             }
@@ -143,7 +166,29 @@ internal sealed class InteractionHubWindow : MonoBehaviour
 
     internal void Open()
     {
-        if (_requesting || _interactionPending) return;
+        TryOpen();
+    }
+
+    internal bool TryOpenForCharacter(int targetId, InteractionPersonKind kind,
+        InteractionPersonGroup preferredGroup)
+    {
+        // Native card/button callbacks can briefly move UI focus before their
+        // onClick listener runs. Their exact patch targets already prove the
+        // click came from the world-map UI, so only require an active map here.
+        if (!HasActiveWorldMap()) return false;
+        return TryOpen(targetId, kind, preferredGroup,
+            InteractionHubTargetPolicy.ShouldAutoMeet(kind, preferredGroup));
+    }
+
+    private bool TryOpen(int targetId = -1,
+        InteractionPersonKind kind = InteractionPersonKind.Character,
+        InteractionPersonGroup preferredGroup = InteractionPersonGroup.CurrentBlock,
+        bool autoMeet = false)
+    {
+        if (_requesting || _interactionPending) return false;
+        _requestedTargetId = targetId;
+        _requestedKind = kind;
+        _requestedGroup = preferredGroup;
         PrewarmShopUi();
         _closedByUser = false;
         _interactionTab.Replace(new[] { InteractionTab.Favorite }, notify: false);
@@ -152,9 +197,24 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         // that cached tree immediately while the fresh snapshot is requested,
         // instead of replacing it with a loading document and rebuilding the
         // expensive native character cards twice.
-        if (_window != null && _personContent != null && _actionContent != null)
+        if (!autoMeet && _window != null && _personContent != null && _actionContent != null)
             _window.Show();
-        RefreshAndShow();
+        if (autoMeet)
+        {
+            _requesting = true;
+            InteractionHubBackendClient.Meet(targetId, (success, met, message) =>
+            {
+                _requesting = false;
+                if (!success || !met)
+                    Debug.LogWarning("[护肝交互] 自动结识未完成：" + message);
+                RefreshAndShow();
+            });
+        }
+        else
+        {
+            RefreshAndShow();
+        }
+        return true;
     }
 
     private void RefreshAndShow()
@@ -165,7 +225,8 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         {
             _requesting = false;
             _snapshot = snapshot;
-            EnsureSelection();
+            if (!ApplyRequestedSelection()) EnsureSelection();
+            ResolveActionTabForSelectedPerson();
             if (snapshot.Success && _window != null &&
                 _personContent != null && _actionContent != null)
             {
@@ -474,6 +535,7 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         _interactionPending = true;
         _nativeEventObserved = false;
         _nativeEventWindow = null;
+        _nativeEventClosedAt = -1f;
         if (option.PreferenceKey == InteractionHubPolicy.ShowCharacterKey)
         {
             _window?.Hide();
@@ -496,6 +558,10 @@ internal sealed class InteractionHubWindow : MonoBehaviour
             UIManager.Instance.ShowUI(UIElement.Exchange);
             return;
         }
+
+        if (InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeFlow(
+                _interactionPending, nativeEventActive: false))
+            _window?.Hide();
 
         InteractionHubBackendClient.Begin(person.TargetId, person.Kind == InteractionPersonKind.Caravan,
             option.PreferenceKey, option.TemplateId,
@@ -540,7 +606,18 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         _selectedKind = person.Kind;
         UpdateCardTint(previous);
         UpdateCardTint(PersonKey(person));
+        ResolveActionTabForSelectedPerson();
         PopulateActions();
+    }
+
+    private void ResolveActionTabForSelectedPerson()
+    {
+        InteractionPersonView? person = SelectedPerson();
+        if (person == null) return;
+        InteractionTab resolved = InteractionHubPolicy.ResolveVisibleTab(
+            person.Options, _preferences.Favorites,
+            _interactionTab.Selected.FirstOrDefault());
+        _interactionTab.Replace(new[] { resolved }, notify: false);
     }
 
     private void UpdateCardTint(long key)
@@ -555,6 +632,25 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         IReadOnlyList<InteractionPersonView> current = CurrentPeople();
         if (current.Any(IsSelected)) return;
         SelectDefaultPerson();
+    }
+
+    private bool ApplyRequestedSelection()
+    {
+        if (_snapshot == null || _requestedTargetId < 0) return false;
+        int targetId = _requestedTargetId;
+        InteractionPersonKind kind = _requestedKind;
+        InteractionPersonGroup preferredGroup = _requestedGroup;
+        _requestedTargetId = -1;
+
+        InteractionPersonGroup? resolved = InteractionHubTargetPolicy.ResolveGroup(
+            targetId, kind, preferredGroup,
+            _snapshot.CurrentBlock, _snapshot.Teammates, _snapshot.Merchants);
+        if (resolved == null) return false;
+
+        _personGroup.Replace(new[] { resolved.Value }, notify: false);
+        _selectedTargetId = targetId;
+        _selectedKind = kind;
+        return true;
     }
 
     private void SelectDefaultPerson()
@@ -620,6 +716,7 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         _waitingForWorldMap = false;
         _nativeEventObserved = false;
         _nativeEventWindow = null;
+        _nativeEventClosedAt = -1f;
         _closedByUser = false;
     }
 
@@ -647,6 +744,12 @@ internal sealed class InteractionHubWindow : MonoBehaviour
         Resources.FindObjectsOfTypeAll<ViewWorldMap>()
             .Any(view => view.gameObject.activeInHierarchy) &&
         !ViewWorldMap.InAdventureRemake;
+
+    private static bool IsNativeFlowExternalUiActive() =>
+        UIManager.Instance != null &&
+        (UIManager.Instance.IsElementActive(UIElement.NewShop) ||
+         UIManager.Instance.IsElementActive(UIElement.Exchange) ||
+         UIManager.Instance.IsElementActive(UIElement.CharacterMenu));
 
     private bool IsNativeEventWindowActive()
     {
@@ -772,4 +875,8 @@ internal static class InteractionHubRuntime
     }
 
     internal static void Open() => _window?.Open();
+
+    internal static bool TryOpenForCharacter(int targetId, InteractionPersonKind kind,
+        InteractionPersonGroup preferredGroup) =>
+        _window?.TryOpenForCharacter(targetId, kind, preferredGroup) == true;
 }

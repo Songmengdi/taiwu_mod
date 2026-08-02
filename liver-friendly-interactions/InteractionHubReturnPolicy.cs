@@ -12,6 +12,7 @@ internal static class InteractionHubReturnPolicy
 {
     private const string GiftCancelledEvent = "79705282-b752-4194-a11a-c627d2cbede5";
     private const string GiftSelectEvent = "5699d2a7-30c6-456e-9fe2-695b674e9e46";
+    private const string BrowseGoodsCompletedEvent = "966d20e2-a5c8-40e4-a2cd-a5e3991ae53a";
 
     private static readonly HashSet<string> MenuEvents = new(StringComparer.Ordinal)
     {
@@ -30,7 +31,7 @@ internal static class InteractionHubReturnPolicy
     internal static bool ShouldPreserveAcrossHiddenDisplay(short templateId) => templateId == 6;
 
     internal static bool IsAutoReturnBridgeEvent(string eventGuid) =>
-        eventGuid == GiftCancelledEvent;
+        eventGuid == GiftCancelledEvent || eventGuid == BrowseGoodsCompletedEvent;
 
     internal static bool DidStartDirectInteraction(
         short templateId,

@@ -23,4 +23,10 @@ public static class BackendHotloadEntrypoint
         harmony.CreateClassProcessor(typeof(InteractionHubReturnPatch)).Patch();
         return "Installed interaction hub backend for " + modId + ".";
     }
+
+    public static string InstallAutoMeet(string modId)
+    {
+        InteractionHubModMethods.RegisterMeet(modId);
+        return "Installed interaction hub auto-meet backend for " + modId + ".";
+    }
 }

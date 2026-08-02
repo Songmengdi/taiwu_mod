@@ -11,6 +11,27 @@ internal static class InteractionHubWorldMapFocusPolicy
     internal static bool ShouldReturnFromExternalUi(bool wasObservedActive, bool isActive) =>
         wasObservedActive && !isActive;
 
+    internal static bool ShouldInspectNativeFlowCompletion(
+        bool wasObservedActive,
+        bool nativeEventActive,
+        bool transitionSettled) =>
+        wasObservedActive && !nativeEventActive && transitionSettled;
+
+    internal static bool ShouldInspectWorldMapAfterNativeFlow(
+        bool shouldInspectCompletion,
+        bool externalPopupActive) =>
+        shouldInspectCompletion && !externalPopupActive;
+
+    internal static bool ShouldReturnFromNativeFlow(
+        bool wasObservedActive,
+        bool nativeEventActive,
+        bool transitionSettled,
+        bool externalPopupActive,
+        bool worldMapActive) =>
+        ShouldInspectNativeFlowCompletion(
+            wasObservedActive, nativeEventActive, transitionSettled) &&
+        !externalPopupActive && worldMapActive;
+
     internal static bool ShouldSearchForNativeEventWindow(
         bool hasCachedWindow,
         bool wasObservedActive) =>
@@ -32,8 +53,10 @@ internal static class InteractionHubWorldMapFocusPolicy
         float graceSeconds) =>
         ShouldCheckWorldMapFallback(wasObservedActive) && secondsWaiting >= graceSeconds;
 
-    internal static bool ShouldHideHubForNativeEvent(bool nativeEventActive) =>
-        nativeEventActive;
+    internal static bool ShouldHideHubForNativeFlow(
+        bool interactionPending,
+        bool nativeEventActive) =>
+        interactionPending || nativeEventActive;
 
     internal static bool ShouldOpenFromShortcut(
         bool hasSupportedMapFocus,

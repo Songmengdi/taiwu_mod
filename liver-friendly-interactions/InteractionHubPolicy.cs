@@ -43,6 +43,29 @@ internal static class InteractionHubPolicy
         return selected.ToArray();
     }
 
+    internal static InteractionTab ResolveVisibleTab(
+        IReadOnlyList<InteractionOptionView> options,
+        IReadOnlyList<string> favorites,
+        InteractionTab currentTab)
+    {
+        IReadOnlyList<InteractionOptionView> current = Select(options, favorites, currentTab);
+        if (current.Any(IsMeaningfulAction)) return currentTab;
+
+        foreach (InteractionTab candidate in new[] { InteractionTab.Favorite, InteractionTab.Other })
+        {
+            if (candidate == currentTab) continue;
+            if (Select(options, favorites, candidate).Any(IsMeaningfulAction))
+                return candidate;
+        }
+
+        if (current.Count > 0) return currentTab;
+        return new[] { InteractionTab.Favorite, InteractionTab.Other, InteractionTab.Unavailable }
+            .FirstOrDefault(candidate => Select(options, favorites, candidate).Count > 0);
+    }
+
+    private static bool IsMeaningfulAction(InteractionOptionView option) =>
+        option.PreferenceKey != ShowCharacterKey;
+
     internal static string DisplayName(short templateId, string nativeName) => templateId switch
     {
         21 => "交换私人藏书",

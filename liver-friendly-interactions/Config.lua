@@ -18,7 +18,19 @@ return {
     HasArchive = false,
     NeedRestartWhenSettingChanged = false,
     ChangeConfig = false,
-    DefaultSettings = { },
+    DefaultSettings = {
+        [1] = {
+            SettingType = "Toggle",
+            Key = "OverrideWorldMapCharacterClicks",
+            DisplayName = "覆盖大地图人物点击",
+            Description = "开启时，点击大地图人物列表及底部同道会打开护肝交互；关闭后保留原版点击，只能按 ~ 打开。",
+            GroupName = "人物交互",
+            DefaultValue = true,
+        },
+    },
+    SettingGroups = {
+        [1] = "人物交互",
+    },
     TagList = {
         [1] = "Modifications",
         [2] = "Compatible Mods",

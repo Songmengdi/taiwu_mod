@@ -8,6 +8,7 @@ internal static class InteractionHubBackendClient
 {
     private const string SnapshotMethod = "LiverFriendlyInteractions.InteractionHub.Snapshot.v2";
     private const string BeginMethod = "LiverFriendlyInteractions.InteractionHub.Begin.v2";
+    private const string MeetMethod = "LiverFriendlyInteractions.InteractionHub.Meet.v1";
 
     internal static void GetSnapshot(Action<InteractionHubSnapshot> callback) =>
         Call(SnapshotMethod, new SerializableModData(), data => callback(ParseSnapshot(data)));
@@ -22,6 +23,16 @@ internal static class InteractionHubBackendClient
         parameter.Set("TemplateId", (int)templateId);
         Call(BeginMethod, parameter, data => callback(
             Get(data, "Success", false) && Get(data, "Started", false),
+            Get(data, "Message", string.Empty)));
+    }
+
+    internal static void Meet(int characterId, Action<bool, bool, string> callback)
+    {
+        var parameter = new SerializableModData();
+        parameter.Set("CharacterId", characterId);
+        Call(MeetMethod, parameter, data => callback(
+            Get(data, "Success", false),
+            Get(data, "Met", false),
             Get(data, "Message", string.Empty)));
     }
 

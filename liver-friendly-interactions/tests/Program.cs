@@ -160,7 +160,41 @@ Assert("私人藏书显示名", "交换私人藏书", InteractionHubPolicy.Displ
 Assert("默认首项显示人物", InteractionHubPolicy.ShowCharacterKey,
     InteractionHubPolicy.DefaultFavorites[0]);
 
-Console.WriteLine("护肝交互统一人物交互排序策略测试通过：6 项");
+var meetOnlyOptions = new[]
+{
+    new InteractionOptionView(-1, InteractionHubPolicy.ShowCharacterKey,
+        "显示人物", true, -2, 0, 0),
+    new InteractionOptionView(-1, InteractionHubPolicy.MeetCharacterKey,
+        "结识", true, -1, 0, 0),
+};
+Assert("常用仅有显示人物时自动切到结识", (byte)InteractionTab.Other,
+    (byte)InteractionHubPolicy.ResolveVisibleTab(
+        meetOnlyOptions,
+        new[] { InteractionHubPolicy.ShowCharacterKey },
+        InteractionTab.Favorite));
+Assert("已经位于结识所在页时保持当前页", (byte)InteractionTab.Other,
+    (byte)InteractionHubPolicy.ResolveVisibleTab(
+        meetOnlyOptions,
+        new[] { InteractionHubPolicy.ShowCharacterKey },
+        InteractionTab.Other));
+Assert("常用存在真正交互时保持常用", (byte)InteractionTab.Favorite,
+    (byte)InteractionHubPolicy.ResolveVisibleTab(
+        hubOptions,
+        favorites,
+        InteractionTab.Favorite));
+var favoriteOnlyOptions = new[]
+{
+    new InteractionOptionView(-1, InteractionHubPolicy.ShowCharacterKey,
+        "显示人物", true, -2, 0, 0),
+    new InteractionOptionView(57, "interaction:57", "浏览货物", true, 57, 0, 0),
+};
+Assert("切换人物后其他页为空则回到有动作的常用页", (byte)InteractionTab.Favorite,
+    (byte)InteractionHubPolicy.ResolveVisibleTab(
+        favoriteOnlyOptions,
+        new[] { InteractionHubPolicy.ShowCharacterKey, "interaction:57" },
+        InteractionTab.Other));
+
+Console.WriteLine("护肝交互统一人物交互排序策略测试通过：10 项");
 
 Assert("江湖商会四品成年成员归入商人", expected: true,
     InteractionHubGroupingPolicy.IsBlockMerchant(28, 4, 24, 16));
@@ -198,6 +232,45 @@ Assert("原版人物页尚未显示时不能提前返回", expected: false,
 Assert("原生事件窗口显示过且已关闭时返回交互中心", expected: true,
     InteractionHubWorldMapFocusPolicy.ShouldReturnFromExternalUi(
         wasObservedActive: true, isActive: false));
+Assert("原生事件仍显示时不执行昂贵的返回环境探测", expected: false,
+    InteractionHubWorldMapFocusPolicy.ShouldInspectNativeFlowCompletion(
+        wasObservedActive: true,
+        nativeEventActive: true,
+        transitionSettled: false));
+Assert("原生事件关闭且过渡完成后才探测返回环境", expected: true,
+    InteractionHubWorldMapFocusPolicy.ShouldInspectNativeFlowCompletion(
+        wasObservedActive: true,
+        nativeEventActive: false,
+        transitionSettled: true));
+Assert("商店仍显示时不执行昂贵的大地图探测", expected: false,
+    InteractionHubWorldMapFocusPolicy.ShouldInspectWorldMapAfterNativeFlow(
+        shouldInspectCompletion: true,
+        externalPopupActive: true));
+Assert("原生外部窗口全部关闭后才探测大地图", expected: true,
+    InteractionHubWorldMapFocusPolicy.ShouldInspectWorldMapAfterNativeFlow(
+        shouldInspectCompletion: true,
+        externalPopupActive: false));
+Assert("原生事件转入商店时不能提前返回交互中心", expected: false,
+    InteractionHubWorldMapFocusPolicy.ShouldReturnFromNativeFlow(
+        wasObservedActive: true,
+        nativeEventActive: false,
+        transitionSettled: true,
+        externalPopupActive: true,
+        worldMapActive: true));
+Assert("原生事件与后续窗口的切换间隙不能提前返回交互中心", expected: false,
+    InteractionHubWorldMapFocusPolicy.ShouldReturnFromNativeFlow(
+        wasObservedActive: true,
+        nativeEventActive: false,
+        transitionSettled: false,
+        externalPopupActive: false,
+        worldMapActive: true));
+Assert("原生事件结束并回到大地图后返回交互中心", expected: true,
+    InteractionHubWorldMapFocusPolicy.ShouldReturnFromNativeFlow(
+        wasObservedActive: true,
+        nativeEventActive: false,
+        transitionSettled: true,
+        externalPopupActive: false,
+        worldMapActive: true));
 Assert("交互中心主动关闭后快捷键可以重新打开", expected: true,
     InteractionHubWorldMapFocusPolicy.ShouldOpenFromShortcut(
         hasSupportedMapFocus: false,
@@ -249,14 +322,20 @@ Assert("world map fallback starts after native event startup grace period", expe
         wasObservedActive: false,
         secondsWaiting: 2.0f,
         graceSeconds: 2.0f));
-Assert("hub remains visible while native event is still starting", expected: false,
-    InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeEvent(
+Assert("hub hides as soon as native interaction starts", expected: true,
+    InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeFlow(
+        interactionPending: true,
         nativeEventActive: false));
-Assert("hub hides as soon as native event becomes active", expected: true,
-    InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeEvent(
+Assert("hub hides while native event is active", expected: true,
+    InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeFlow(
+        interactionPending: true,
         nativeEventActive: true));
+Assert("hub remains visible while no native interaction is pending", expected: false,
+    InteractionHubWorldMapFocusPolicy.ShouldHideHubForNativeFlow(
+        interactionPending: false,
+        nativeEventActive: false));
 
-Console.WriteLine("护肝交互大地图焦点与返回策略测试通过：6 项");
+Console.WriteLine("护肝交互大地图焦点与返回策略测试通过：26 项");
 
 Assert("直达交互经过初始菜单时不能自动退出",
     (byte)InteractionHubReturnDecision.None,
@@ -347,6 +426,8 @@ Assert("取消赠礼的不选页是自动返回中转页", expected: true,
     InteractionHubReturnPolicy.IsAutoReturnBridgeEvent("79705282-b752-4194-a11a-c627d2cbede5"));
 Assert("赠礼结算页必须保留给玩家查看", expected: false,
     InteractionHubReturnPolicy.IsAutoReturnBridgeEvent("a431b14a-a2ec-4799-baaf-c9eee30cfc30"));
+Assert("浏览货物结算页自动经过其它话题返回", expected: true,
+    InteractionHubReturnPolicy.IsAutoReturnBridgeEvent("966d20e2-a5c8-40e4-a2cd-a5e3991ae53a"));
 Assert("赠礼原生返回假但已进入选物事件时视为启动成功", expected: true,
     InteractionHubReturnPolicy.DidStartDirectInteraction(
         templateId: 6,
@@ -358,7 +439,60 @@ Assert("赠礼未到达选物事件时保留原生失败", expected: false,
         nativeStarted: false,
         showingEventGuid: "05e87c45-f14e-49ef-8769-cbaced4753ae"));
 
-Console.WriteLine("护肝交互返回会话策略测试通过：11 项");
+Console.WriteLine("护肝交互返回会话策略测试通过：12 项");
+
+InteractionPersonView mapPerson = Person(
+    101, InteractionPersonGroup.CurrentBlock, InteractionPersonKind.Character);
+InteractionPersonView teammateCopy = Person(
+    101, InteractionPersonGroup.Teammate, InteractionPersonKind.Character);
+InteractionPersonView merchant = Person(
+    202, InteractionPersonGroup.Merchant, InteractionPersonKind.Character);
+InteractionPersonView caravan = Person(
+    303, InteractionPersonGroup.Merchant, InteractionPersonKind.Caravan);
+
+Assert("地图普通人物点击需要自动结识", true,
+    InteractionHubTargetPolicy.ShouldAutoMeet(
+        InteractionPersonKind.Character, InteractionPersonGroup.CurrentBlock));
+Assert("底部同道点击不重复结识", false,
+    InteractionHubTargetPolicy.ShouldAutoMeet(
+        InteractionPersonKind.Character, InteractionPersonGroup.Teammate));
+Assert("地图商队点击不执行人物结识", false,
+    InteractionHubTargetPolicy.ShouldAutoMeet(
+        InteractionPersonKind.Caravan, InteractionPersonGroup.CurrentBlock));
+
+Assert("地图点击优先选择当前地格中的同一人物",
+    (byte)InteractionPersonGroup.CurrentBlock,
+    (byte)InteractionHubTargetPolicy.ResolveGroup(
+        101, InteractionPersonKind.Character, InteractionPersonGroup.CurrentBlock,
+        new[] { mapPerson }, new[] { teammateCopy }, Array.Empty<InteractionPersonView>())!.Value);
+Assert("底部同道点击优先选择同道分组",
+    (byte)InteractionPersonGroup.Teammate,
+    (byte)InteractionHubTargetPolicy.ResolveGroup(
+        101, InteractionPersonKind.Character, InteractionPersonGroup.Teammate,
+        new[] { mapPerson }, new[] { teammateCopy }, Array.Empty<InteractionPersonView>())!.Value);
+Assert("地图商人不在当前地格分组时回退到商人分组",
+    (byte)InteractionPersonGroup.Merchant,
+    (byte)InteractionHubTargetPolicy.ResolveGroup(
+        202, InteractionPersonKind.Character, InteractionPersonGroup.CurrentBlock,
+        Array.Empty<InteractionPersonView>(), Array.Empty<InteractionPersonView>(),
+        new[] { merchant })!.Value);
+Assert("商队 ID 不会误选中同 ID 的人物",
+    (byte)InteractionPersonGroup.Merchant,
+    (byte)InteractionHubTargetPolicy.ResolveGroup(
+        303, InteractionPersonKind.Caravan, InteractionPersonGroup.CurrentBlock,
+        new[] { Person(303, InteractionPersonGroup.CurrentBlock,
+            InteractionPersonKind.Character) }, Array.Empty<InteractionPersonView>(),
+        new[] { caravan })!.Value);
+Assert("快照中不存在的目标不产生分组", true,
+    InteractionHubTargetPolicy.ResolveGroup(
+        404, InteractionPersonKind.Character, InteractionPersonGroup.CurrentBlock,
+        new[] { mapPerson }, new[] { teammateCopy }, new[] { merchant, caravan }) == null);
+
+Console.WriteLine("护肝交互地图人物目标定位与自动结识策略测试通过：8 项");
+
+static InteractionPersonView Person(int id, InteractionPersonGroup group,
+    InteractionPersonKind kind) =>
+    new(id, group, kind, "", Array.Empty<InteractionOptionView>(), 0);
 
 static void Assert<T>(string name, T expected, T actual)
     where T : IEquatable<T>

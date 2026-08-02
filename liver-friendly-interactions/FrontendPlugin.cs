@@ -1,5 +1,6 @@
 using HarmonyLib;
 using System.Reflection;
+using GameData.Domains.Mod;
 using TaiwuModdingLib.Core.Plugin;
 
 namespace LiverFriendlyInteractions.Frontend;
@@ -8,12 +9,19 @@ namespace LiverFriendlyInteractions.Frontend;
 public sealed class FrontendPlugin : TaiwuRemakePlugin
 {
     internal static string ModId { get; private set; } = string.Empty;
+    internal static bool OverrideWorldMapCharacterClicks { get; private set; } = true;
 
     public override void Initialize()
     {
         ModId = ModIdStr;
+        ReloadSettings();
         FrontendRuntime.Install(GetGuid());
         InteractionHubRuntime.Install();
+    }
+
+    public override void OnModSettingUpdate()
+    {
+        ReloadSettings();
     }
 
     public override void Dispose()
@@ -25,7 +33,23 @@ public sealed class FrontendPlugin : TaiwuRemakePlugin
     internal static void InstallInteractionHub(string modId)
     {
         ModId = modId;
+        ReloadSettings();
         InteractionHubRuntime.Install();
+    }
+
+    private static void ReloadSettings()
+    {
+        bool enabled = true;
+        try
+        {
+            if (!ModManager.GetSetting(ModId, "OverrideWorldMapCharacterClicks", ref enabled))
+                enabled = true;
+        }
+        catch
+        {
+            enabled = true;
+        }
+        OverrideWorldMapCharacterClicks = enabled;
     }
 }
 
@@ -36,6 +60,7 @@ public static class InteractionHubHotloadEntrypoint
         UnityEngine.GameObject? existing = UnityEngine.GameObject.Find("LiverFriendlyInteractions_InteractionHub");
         if (existing != null) UnityEngine.Object.Destroy(existing);
         FrontendPlugin.InstallInteractionHub(modId);
+        WorldMapCharacterOverrideHotloadRuntime.Install();
         return "Installed interaction hub frontend for " + modId + ".";
     }
 
@@ -44,6 +69,7 @@ public static class InteractionHubHotloadEntrypoint
         InteractionHubRuntime.Open();
         return "Opened interaction hub.";
     }
+
 }
 
 public static class FrontendRuntime
